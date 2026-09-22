@@ -44,3 +44,12 @@ test('portrait grouping respects restricted profiles and report-relative family 
  assert.equal(rules.groupPortraits(people,{source:'missing'},family).length,0);
  assert.equal(rules.groupPortraits(people,{query:'Hidden'},family).length,0);
 });
+test('saved source connections leave unknowns retrospectively without promoting proposals',()=>{
+ const p=photo();p.claims=[{id:'c1',profileId:'old',label:'',status:'proposed',evidenceIds:['e1']}];p.evidence=[{id:'e1',kind:'report',reportId:'report',page:1,note:'Printed caption'}];
+ const refs={...catalog,profileAliases:{old:{targets:['p1']}}};
+ assert.equal(rules.awaitingIdentification(p,refs),false);assert.equal(p.claims[0].status,'proposed');
+ assert.equal(rules.awaitingIdentification({...p,unidentifiedPeople:true},refs),true);
+ assert.equal(rules.awaitingIdentification({...p,claims:[{...p.claims[0],status:'rejected'}]},refs),true);
+ assert.equal(rules.awaitingIdentification({...p,evidence:[]},refs),true);
+ assert.equal(rules.awaitingIdentification(p,{...catalog,profileAliases:{old:{targets:['p1','p2']}}}),true);
+});

@@ -41,10 +41,13 @@
   }
   function renderUnknown(){
     const scope=$('#unknownPortraitSource').value||'all';
-    const photos=[...records.values()].filter(p=>photoStatus(p)!=='confirmed'&&(scope==='all'||scope===p.kind)&&!restricted(p));
-    $('#unknownPortraitSummary').textContent=photos.length+' photographs awaiting evidence or confirmation';
+    const photos=[...records.values()].filter(p=>rules.awaitingIdentification(p,catalog())&&(scope==='all'||scope===p.kind)&&!restricted(p));
+    $('#unknownPortraitSummary').textContent=photos.length+' photographs awaiting identification';
     $('#unknownPortraits').innerHTML=photos.slice(0,unknownLimit).map(p=>`<article class="unidentified-card"><button data-photo-id="${esc(p.id)}">${crop(p)}<strong>${esc(p.title)}</strong><small>${p.kind==='wall'?'Wall photograph':'Report · page '+p.page} · ${photoStatus(p)}</small></button><button class="connect-source-button" data-connect-source-photo="${esc(p.id)}">Connect to source person →</button></article>`).join('')||'<p>No unidentified photographs in this selection. Use “Mark unidentified portrait” on any report page to add one.</p>';
     $('#moreUnknownPortraits').hidden=photos.length<=unknownLimit;
+    const connected=[...records.values()].filter(p=>!rules.awaitingIdentification(p,catalog())&&(scope==='all'||scope===p.kind)&&!restricted(p));
+    $('#connectedPortraitSummary').textContent=connected.length+' connected photographs';
+    $('#connectedPortraits').innerHTML=connected.map(p=>`<article class="unidentified-card"><button data-photo-id="${esc(p.id)}">${crop(p)}<strong>${esc(p.title)}</strong><small>${p.claims.filter(c=>c.status!=='rejected').map(c=>esc(profile(c.profileId)?.name||c.label)).join(' · ')}</small><small>${photoStatus(p)==='confirmed'?'Identity confirmed':'Connection saved · confirmation pending'}</small></button></article>`).join('')||'<p>Photographs appear here after you save a source connection.</p>';
   }
   function renderCandidates(){
     const candidates=app()?.search($('#photoPersonSearch').value,$('#photoFamilyFilter').value)||[];
@@ -236,7 +239,7 @@
   $('#savePhotoResearch').addEventListener('click',save);
   ['photoLabel','photoNotes','photoUnidentifiedPeople','photoX','photoY','photoW','photoH'].forEach(id=>$('#'+id).addEventListener('input',()=>{pullFields();markDirty();}));
   $('#photoNotebook').addEventListener('change',e=>{if(!e.target.dataset.claimEvidence)return;const p=current(),c=p.claims.find(c=>c.id===e.target.dataset.claimEvidence);c.evidenceIds=e.target.checked?[...new Set([...c.evidenceIds,e.target.value])]:c.evidenceIds.filter(id=>id!==e.target.value);if(c.status==='confirmed')c.status='proposed';markDirty();renderClaims();});
-  document.addEventListener('click',e=>{
+  document.addEventListener('click',async e=>{
     const connect=e.target.closest('[data-connect-source-photo]');if(connect){e.preventDefault();beginSourceConnection(connect.dataset.connectSourcePhoto);return;}
     const back=e.target.closest('[data-return-photo]');if(back){e.preventDefault();selectPhoto(back.dataset.returnPhoto);return;}
     if(e.target.closest('[data-end-connection]')){if(!saving){connectionPhoto=null;clearSourceChoice();renderSourcePeople();}return;}
@@ -244,7 +247,7 @@
     const hotspot=e.target.closest('[data-source-person-ids]');if(hotspot){e.preventDefault();if(sourceDrawing||!sourceDoc||saving)return;const ids=hotspot.dataset.sourcePersonIds.split(' ');if(ids.length===1)chooseSourcePerson(ids[0],sourceDoc.id,sourceDoc.page);else{clearSourceChoice();sourceChoiceIds=ids;$('#sourcePeopleSearch').value='';$('#sourcePeopleScope').value='page';renderSourcePeople();$('#sourcePeopleSummary').focus({preventScroll:true});$('#sourcePeoplePanel').scrollIntoView({block:'start'});}return;}
     const target=e.target.closest('[data-photo-id]');if(target){e.preventDefault();if(suppressClick||wallDrawing)return;selectPhoto(target.dataset.photoId);return;}
     const candidate=e.target.closest('[data-propose-person]');if(candidate){propose(candidate.dataset.proposePerson);return;}
-    const action=e.target.closest('[data-claim-action]');if(action){const p=current(),c=p?.claims.find(c=>c.id===action.dataset.claimId);if(!c)return;const prior=c.status;c.status=action.dataset.claimAction;try{rules.validate(p,catalog());markDirty();renderClaims();}catch(error){c.status=prior;message(error.message,true);}return;}
+    const action=e.target.closest('[data-claim-action]');if(action){const p=current(),c=p?.claims.find(c=>c.id===action.dataset.claimId);if(!c)return;const prior=c.status;c.status=action.dataset.claimAction;try{rules.validate(p,catalog());markDirty();renderClaims();await save();}catch(error){c.status=prior;message(error.message,true);}return;}
     const remove=e.target.closest('[data-remove-evidence]');if(remove){const p=current();p.evidence=p.evidence.filter(x=>x.id!==remove.dataset.removeEvidence);for(const c of p.claims){if(c.evidenceIds.includes(remove.dataset.removeEvidence)){c.evidenceIds=c.evidenceIds.filter(id=>id!==remove.dataset.removeEvidence);if(c.status==='confirmed')c.status='proposed';}}markDirty();renderClaims();}
   });
   $('#closePhotoNotebook').addEventListener('click',()=>{if(saving)return;allowLeave();selected=null;connectionPhoto=null;clearSourceChoice();dirty=false;$('#photoResearchEditor').hidden=true;$('#photoResearchEmpty').hidden=false;$('#closePhotoNotebook').hidden=true;$('#linkTreePerson').hidden=true;$('#citeSourcePhoto').hidden=true;history.pushState(null,'','#wall');renderRegions();});
@@ -254,7 +257,12 @@
   $('#exportPhotoDraft').addEventListener('click',()=>{pullFields();download({app:'The Living Family Wall',schemaVersion:1,photographs:[current()]},'photo-research-draft.json');});
   async function importNotebook(file){if(!file)return;try{if(file.size>5000000)throw Error('Choose a backup smaller than 5 MB.');const data=JSON.parse(await file.text());if(data.app!=='The Living Family Wall'||data.schemaVersion!==1||!Array.isArray(data.photographs)||data.photographs.length>500)throw Error('Choose a photo research notebook export.');const values=data.photographs.map(p=>rules.validate(p,catalog()));if(!values.length)throw Error('This backup contains no photographs.');if(!window.confirm('Restore '+values.length+' photograph drafts? Existing saved records stay unchanged until you save each draft.'))return;for(const p of values){const restored={...p,revision:records.get(p.id)?.revision||0};drafts.set(p.id,restored);if(!records.has(p.id))records.set(p.id,restored);}selectPhoto(values[0].id);notify('Backup restored as drafts. Review and save each photograph.');}catch(error){notify(error.message);}}
   $('#copyPhotoLink').addEventListener('click',async()=>{try{if(!current()?.revision)throw Error('Save this photograph before copying its permanent link.');await navigator.clipboard.writeText(new URL(linkFor(current()),location.href).href);notify('Picture link copied. Your private Site access is required.');}catch(error){message(error.message,true);}});
-  function archiveChanged(){const family=$('#photoFamilyFilter').value,source=$('#evidenceReport').value;$('#photoFamilyFilter').innerHTML='<option value="">All reports</option>'+reportOptions();$('#photoFamilyFilter').value=family;$('#evidenceReport').innerHTML=reportOptions();if(source)$('#evidenceReport').value=source;if(selected)renderEditor();renderUnknown();if(!$('#sourceViewer').hidden&&app()?.currentSource){sourceDoc=app().currentSource;renderSourcePeople();loadSourceMap();}}
+  function archiveChanged(){
+    for(const p of app()?.unidentifiedPortraits||[])if(!records.has(p.id))records.set(p.id,p);
+    for(const [id,p] of records)records.set(id,rules.redirectReferences(p,catalog()));
+    for(const [id,p] of drafts)drafts.set(id,rules.redirectReferences(p,catalog()));
+    if(sourceMap?.snapshotId!==app()?.snapshotId){sourceMap=null;sourceMapState='idle';}
+    const family=$('#photoFamilyFilter').value,source=$('#evidenceReport').value;$('#photoFamilyFilter').innerHTML='<option value="">All reports</option>'+reportOptions();$('#photoFamilyFilter').value=family;$('#evidenceReport').innerHTML=reportOptions();if(source)$('#evidenceReport').value=source;if(selected)renderEditor();renderUnknown();if(!$('#sourceViewer').hidden&&app()?.currentSource){sourceDoc=app().currentSource;renderSourcePeople();loadSourceMap();}}
   function restore(){if(!location.hash.startsWith('#wall'))return;const params=new URLSearchParams(location.hash.split('?')[1]||'');if(params.get('photo'))selectPhoto(params.get('photo'),false);if(params.has('unidentified'))$('#unknownPortraitTitle').scrollIntoView({block:'start'});}
   window.addEventListener('hashchange',restore);window.addEventListener('popstate',restore);
   window.addEventListener('beforeunload',event=>{if(dirty||[...drafts].some(([id,p])=>JSON.stringify(p)!==JSON.stringify(records.get(id)))){event.preventDefault();event.returnValue='';}});

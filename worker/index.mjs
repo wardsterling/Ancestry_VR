@@ -1,6 +1,7 @@
 // Bundled with PhotoResearch and a private reference catalog by build-site.mjs.
 import '../photo-research.js';
 import {handleArchiveItems} from './archive-items.mjs';
+import {handleArchiveImports,archivePart,archiveCatalog} from './archive-imports.mjs';
 const json=(body,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
 function database(env){if(!env.DB)throw Error('Photo research storage is unavailable.');return env.DB;}
 export async function handleResearch(request,env,catalog){
@@ -31,8 +32,12 @@ export async function handleResearch(request,env,catalog){
   }catch(error){console.error('Photo research request failed',error.message);return json({error:'The notebook could not be reached. Your draft is still here; try saving again.'},503);}
 }
 export default {async fetch(request,env){
-  const path=new URL(request.url).pathname;
-  if(path==='/api/photo-research'||path.startsWith('/api/photo-research/'))return handleResearch(request,env,REFERENCE_CATALOG);
-  if(path==='/api/archive-items'||path.startsWith('/api/archive-items/'))return handleArchiveItems(request,env,REFERENCE_CATALOG);
-  return env.ASSETS.fetch(request);
+  const path=new URL(request.url).pathname,owner=request.headers.get('oai-authenticated-user-id');
+  try{
+    if(path.startsWith('/api/archive-imports'))return handleArchiveImports(request,env,REFERENCE_CATALOG);
+    if(path==='/api/photo-research'||path.startsWith('/api/photo-research/'))return handleResearch(request,env,await archiveCatalog(env,owner,REFERENCE_CATALOG));
+    if(path==='/api/archive-items'||path.startsWith('/api/archive-items/'))return handleArchiveItems(request,env,await archiveCatalog(env,owner,REFERENCE_CATALOG));
+    const saved=await archivePart(request,env);if(saved)return saved;
+    return env.ASSETS.fetch(request);
+  }catch(error){console.error('Archive load failed',error.message);return json({error:'The saved archive is temporarily unavailable. Please retry.'},503);}
 }};

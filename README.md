@@ -326,6 +326,26 @@ therefore intentionally unavailable.
 
 The existing guide is a small deterministic pilot, not a general conversational AI.
 Archive intake saves original files, links, and notes with optional collection metadata.
+Saved PDFs automatically enter a private import queue when the Site is open. The pinned,
+same-origin PDF.js reader produces page text, previews and image regions; Pyodide runs
+`extract_reports.py`, the same parser used for the original reports. Each import reparses
+all incorporated report text, resolves evidence-supported duplicates, validates family
+links, retains stable profile URLs, and attaches portraits using adjacent printed names.
+No face recognition or external extraction service is used. Keep the Site open while
+processing. Errors offer a retry without re-uploading the original. Unsupported/scanned
+layouts remain saved sources and require transcription; they cannot overwrite the archive.
+
+A new D1 `archive_state` revision switches the complete R2 snapshot only after all source
+previews and validation succeed. Source collections and the report library show uploaded
+PDFs immediately. Existing PDFs are detected by original-byte SHA-256. Concurrent imports
+must reload before retrying; saved originals are immutable. Imports support PDFs up to the
+intake's 20 MB limit and 500 pages. The build needs Poppler's `pdftotext` to prepare text for
+existing private reports; browser imports need no server Python or API key.
+
+Saved, evidence-backed connections leave “Awaiting identification” on every load, including
+older connections. They remain in “Connected photographs,” with proposed/confirmed status
+preserved. Pictures marked as containing additional unknown people stay in the unknown
+list. Confirm/reject actions save immediately; failed saves keep the previous list state.
 Photograph registration, notebook saving, and backup restoration are implemented. Camera mode remains a camera preview and does not recognize faces.
 Source labels point to the supplied reports and do not establish independent proof.
 

@@ -19,3 +19,11 @@ export const archiveItems = sqliteTable('archive_items', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, table => [primaryKey({ columns: [table.ownerId, table.id] })]);
+
+// A complete, validated archive becomes visible with one revision change.
+export const archiveState = sqliteTable('archive_state', {
+  ownerId: text('owner_id').primaryKey(),
+  body: text('body').notNull(),
+  revision: integer('revision').notNull().default(1),
+  updatedAt: text('updated_at').notNull(),
+});

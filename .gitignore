@@ -22,3 +22,5 @@ node_modules/
 source-pages/
 wall-catalog.json
 source-people.json
+
+import-base.json

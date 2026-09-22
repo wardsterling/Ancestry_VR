@@ -23,9 +23,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm ci
       - name: Check code-only release
         run: |
-          if git ls-files | grep -Eq '(^|/)(archive-(data|tree|private-details)|extraction-audit|rebuild-checks|wall-catalog|source-people)\.json$|^(dist|source-documents|source-pages|assets/report-portraits)/|\.(tar\.gz|pdf|pyc)$'; then
+          if git ls-files | grep -Eq '(^|/)(archive-(data|tree|private-details)|extraction-audit|rebuild-checks|wall-catalog|source-people|import-base)\.json$|^(dist|source-documents|source-pages|assets/report-portraits)/|\.(tar\.gz|pdf|pyc)$'; then
             echo 'Private data or generated artifacts found in source. Publication stopped.'
             exit 1
           fi

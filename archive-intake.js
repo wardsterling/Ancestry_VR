@@ -51,7 +51,7 @@
       const response=await fetch('/api/archive-items/'+data.id,{method:'PUT',body:form});let result;try{result=await response.json();}catch{throw Error('Saving is available in the private Site. Please try opening it again.');}
       if(!response.ok)throw Error(result.error||'Could not save the item.');if(!result.item?.id)throw Error('The save could not be confirmed. Please try again.');
       records.set(result.item.id,result.item);loaded=true;loadError='';dirty=false;savedId=result.item.id;editing=result.item;revokePreview();
-      $('#archiveItemForm').hidden=true;$('#archiveIntakeSuccess').hidden=false;$('#archiveIntakeSavedName').textContent=result.item.title;progress(true);status('');$('#viewSavedArchiveItem').focus();renderItems();
+      $('#archiveItemForm').hidden=true;$('#archiveIntakeSuccess').hidden=false;$('#archiveIntakeSavedName').textContent=result.item.title;progress(true);status('');$('#viewSavedArchiveItem').focus();renderItems();window.ArchiveImport?.queue();
     }catch(error){status(error.message+' Your content and optional details are kept here for retry.',true);}
     finally{saving=false;$('#archiveItemForm').querySelectorAll('input,select,textarea,button').forEach(n=>n.disabled=false);$('#archiveItemKind').disabled=!!editing;$('#archiveItemFile').disabled=!!editing;$('#archiveIntakeClose').disabled=false;}
   }
@@ -59,9 +59,20 @@
     const all=[...records.values()].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)),query=$('#archiveItemsSearch').value;
     const matches=all.filter(item=>rules.matches(searchable(item),query,name));
     $('#archiveItemsSummary').textContent=loadError||(!loaded?'Loading saved items…':matches.length+' saved '+(matches.length===1?'item':'items')+(query?' matching your search':''));$('#retryArchiveItems').hidden=!loadError;
-    $('#archiveItemsList').innerHTML=matches.slice(0,limit).map(item=>`<article class="archive-item-card"><a href="#archive?item=${encodeURIComponent(item.id)}" data-archive-item="${esc(item.id)}"><span class="archive-item-type">${esc(item.kind==='file'?item.file.name.split('.').at(-1).toUpperCase():item.kind==='link'?'Web link':'Written note')}</span><h3>${esc(item.title)}</h3><p>${hidden(item)?'Living-person details hidden':esc([item.collection,item.recordedDate,item.place].filter(Boolean).join(' · ')||'No collection details added')}</p></a><button class="text-button" data-edit-archive-item="${esc(item.id)}" ${hidden(item)?'disabled':''}>Edit details</button></article>`).join('')||(loaded&&!loadError?'<p>No items here yet. Add a file, web link, or written note. Collection details are optional.</p>':'');
+    $('#archiveItemsList').innerHTML=matches.slice(0,limit).map(item=>`<article class="archive-item-card"><a href="#archive?item=${encodeURIComponent(item.id)}" data-archive-item="${esc(item.id)}"><span class="archive-item-type">${esc(item.kind==='file'?item.file.name.split('.').at(-1).toUpperCase():item.kind==='link'?'Web link':'Written note')}</span><h3>${esc(item.title)}</h3><p>${hidden(item)?'Living-person details hidden':esc([item.collection,item.recordedDate,item.place].filter(Boolean).join(' · ')||'No collection details added')}</p></a>${incorporation(item)}<button class="text-button" data-edit-archive-item="${esc(item.id)}" ${hidden(item)?'disabled':''}>Edit details</button></article>`).join('')||(loaded&&!loadError?'<p>No items here yet. Add a file, web link, or written note. Collection details are optional.</p>':'');
     $('#moreArchiveItems').hidden=matches.length<=limit;
+    app()?.refreshSources();
     $('#archiveCollectionOptions').innerHTML=[...new Set(all.filter(i=>!hidden(i)).map(i=>i.collection).filter(Boolean))].sort().map(value=>`<option value="${esc(value)}"></option>`).join('');
+  }
+  function incorporation(item){
+    if(item.file?.type!=='application/pdf')return '';
+    const doc=app()?.documents.find(d=>(d.importItemId===item.id||item.contentHash&&d.sha256===item.contentHash)),state=window.ArchiveImport?.status(item.id);
+    return `<div class="archive-import-status ${state?.error?'notebook-error':''}" role="status">${esc(state?.text||(doc?'Incorporated into the archive':'Saved · preparing source pages and family records…'))}${state?.error?` <button class="secondary" data-retry-import="${esc(item.id)}">Retry incorporation</button>`:''}${doc?` <a href="#archive?document=${esc(doc.id)}&page=1" data-source-id="${esc(doc.id)}" data-source-page="1">Read source pages</a> <a href="#archive?report=${esc(doc.id)}&view=tree">Explore family tree</a>`:''}</div>`;
+  }
+  function pendingReports(documents){return [...records.values()].filter(i=>i.file?.type==='application/pdf'&&!documents.some(d=>(d.importItemId===i.id||i.contentHash&&d.sha256===i.contentHash))).map(i=>({id:i.id,title:i.title.replace(/\.pdf$/i,''),importItemId:i.id,pending:true}));}
+  function renderCollections(){
+    const docs=app()?.documents||[],used=new Set([...records.values()].filter(i=>docs.some(d=>d.importItemId===i.id||i.contentHash&&d.sha256===i.contentHash)).map(i=>i.id));
+    $('#sourceCollectionList').innerHTML=docs.map(d=>{const item=records.get(d.importItemId);return `<article class="card"><small>${esc(item?.collection||'Family reports')}</small><a href="#archive?document=${esc(d.id)}&page=1" data-source-id="${esc(d.id)}" data-source-page="1"><strong>${esc(d.title)}</strong><span>${d.pages} pages · Open source</span></a>${item?`<a href="#archive?item=${esc(item.id)}" data-archive-item="${esc(item.id)}">Item details</a>`:''}</article>`;}).join('')+[...records.values()].filter(i=>!used.has(i.id)).map(i=>`<article class="card"><small>${esc(hidden(i)?'Private item':i.collection||'Uncollected items')}</small><a href="#archive?item=${esc(i.id)}" data-archive-item="${esc(i.id)}"><strong>${esc(i.title)}</strong><span>${i.file?.type==='application/pdf'?'Saved report':i.kind==='file'?'Uploaded original':i.kind==='link'?'Web source':'Written source'} · Open item</span></a>${incorporation(i)}</article>`).join('');
   }
   function displayItem(item){
     $('#archiveItemDetail').hidden=false;const restricted=hidden(item),fileUrl='/api/archive-items/'+encodeURIComponent(item.id)+'/file';let media='';
@@ -73,7 +84,7 @@
       }else if(item.kind==='link')media=`<p><a class="secondary" href="${esc(rules.safeUrl(item.url))}" target="_blank" rel="noopener noreferrer">Open saved link</a></p><p class="archive-item-text">${esc(item.url)}</p>`;
       else media=`<p class="archive-item-text">${esc(item.note)}</p>`;
     }
-    $('#archiveItemDetail').innerHTML=`<div class="archive-item-heading"><h3>${esc(item.title)}</h3><button class="secondary" data-close-archive-item="true">Close item</button></div>${restricted?'<p class="privacy-panel">Turn on “Show living-person details” to view this item’s content and metadata.</p>':media+metadata(item)}<div class="archive-item-actions"><button class="secondary" data-edit-archive-item="${esc(item.id)}" ${restricted?'disabled':''}>Edit details</button><a href="#archive?item=${encodeURIComponent(item.id)}" data-archive-item="${esc(item.id)}">Permanent item link</a><button class="text-button" data-copy-archive-item="${esc(item.id)}">Copy link</button></div>`;
+    $('#archiveItemDetail').innerHTML=`<div class="archive-item-heading"><h3>${esc(item.title)}</h3><button class="secondary" data-close-archive-item="true">Close item</button></div>${incorporation(item)}${restricted?'<p class="privacy-panel">Turn on “Show living-person details” to view this item’s content and metadata.</p>':media+metadata(item)}<div class="archive-item-actions"><button class="secondary" data-edit-archive-item="${esc(item.id)}" ${restricted?'disabled':''}>Edit details</button><a href="#archive?item=${encodeURIComponent(item.id)}" data-archive-item="${esc(item.id)}">Permanent item link</a><button class="text-button" data-copy-archive-item="${esc(item.id)}">Copy link</button></div>`;
   }
   async function openItem(id,push=true){
     if(!rules.idPattern.test(id))return;selectedItem=id;window.LFW.showView('archive',false);
@@ -85,7 +96,7 @@
   async function load(){
     loadError='';renderItems();try{const response=await fetch('/api/archive-items',{cache:'no-store'});const data=await response.json();if(!response.ok||!Array.isArray(data.items))throw Error(data.error||'Archive item storage is unavailable.');for(const item of data.items)records.set(item.id,item);loaded=true;}
     catch{loadError='Saved items could not be loaded. Retry, or open the private Site to use your archive.';}
-    renderItems();restore();
+    renderItems();restore();window.ArchiveImport?.queue();
   }
   function restore(){if(!location.hash.startsWith('#archive'))return;const params=new URLSearchParams(location.hash.split('?')[1]||'');if(params.get('item'))openItem(params.get('item'),false);else{selectedItem=null;$('#archiveItemDetail').hidden=true;if(params.get('items')==='1')$('#savedArchiveItems').scrollIntoView({block:'start'});}}
   function archiveChanged(){renderItems();renderPeople();if(selectedItem&&records.has(selectedItem))displayItem(records.get(selectedItem));if(editing&&hidden(editing)&&!$('#archiveIntake').hidden){$('#archiveIntake').hidden=true;window.LFW.notify('Living-person item details are hidden. Turn the switch on to continue editing.');}}
@@ -107,6 +118,6 @@
     const copy=event.target.closest('[data-copy-archive-item]');if(copy){try{await navigator.clipboard.writeText(new URL('#archive?item='+encodeURIComponent(copy.dataset.copyArchiveItem),location.href).href);window.LFW.notify('Private item link copied.');}catch{window.LFW.notify('Use the permanent item link to copy or bookmark this item.');}}
   });
   window.addEventListener('hashchange',restore);window.addEventListener('popstate',restore);window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
-  window.ArchiveItems={open:openItem,archiveChanged,restore,setSearch(query){$('#archiveItemsSearch').value=query;limit=12;renderItems();},suggest(query){return [...records.values()].filter(item=>rules.matches(searchable(item),query,name)).slice(0,5).map(item=>({kind:'item',id:item.id,value:item.title}));}};
+  window.ArchiveItems={get loaded(){return loaded;},all(){return [...records.values()];},pendingReports,renderCollections,open:openItem,archiveChanged,restore,setSearch(query){$('#archiveItemsSearch').value=query;limit=12;renderItems();},suggest(query){return [...records.values()].filter(item=>rules.matches(searchable(item),query,name)).slice(0,5).map(item=>({kind:'item',id:item.id,value:item.title}));}};
   load();
 })();

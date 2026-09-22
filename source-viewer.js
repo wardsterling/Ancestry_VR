@@ -2,10 +2,11 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.SourceDocuments=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
   function source(documents,id,page=1){
     const doc=documents.find(d=>d.id===id);
-    if(!doc||!/^source-documents\/[a-z0-9-]+\.pdf$/.test(doc.url))return null;
+    if(!doc||!(/^source-documents\/[a-z0-9-]+\.pdf$/.test(doc.url)||doc.importItemId&&doc.url===`/api/archive-items/${doc.importItemId}/file?inline=1`&&/^item-[a-zA-Z0-9_-]+$/.test(doc.importItemId)))return null;
     const number=Math.max(1,Math.min(doc.pages||1,Math.floor(Number(page)||1)));
     const prefix=doc.pageImages===`source-pages/${doc.id}`?doc.pageImages:null;
-    return {...doc,page:number,href:doc.url+'#page='+number,pageImage:prefix?`${prefix}/${number}.jpg`:null,pageText:prefix?`${prefix}/${number}.txt`:null};
+    const extra=doc.pageAssets?.[number-1],safe=value=>typeof value==='string'&&value.startsWith(`/api/archive-imports/${doc.importItemId}/assets/`)&&/^\/api\/archive-imports\/item-[a-zA-Z0-9_-]+\/assets\/[a-f0-9]{64}\/page-\d+\.(jpg|txt)$/.test(value)?value:null;
+    return {...doc,page:number,href:doc.url+'#page='+number,pageImage:prefix?`${prefix}/${number}.jpg`:safe(extra?.image),pageText:prefix?`${prefix}/${number}.txt`:safe(extra?.text)};
   }
   const normalize=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   function people(profiles,doc,{scope='page',query=''}={}){

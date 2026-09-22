@@ -156,6 +156,11 @@
     $('#portraitGallery').innerHTML=groups.map(g=>{const people=g.people.slice(0,left);left-=people.length;if(!people.length)return '';return (groups.length>1?`<h3 class="portrait-group-heading">${escape(g.label)}</h3>`:'')+people.map(p=>`<article class="report-portrait-card"><a data-profile-id="${escape(p.id)}" href="${escape(Model.link({focus:p.id,person:p.id}))}">${explorer.portrait(p)}<strong>${escape(p.name)}</strong></a><small>${p.portrait?.source?sourceLink(p.portrait.source,'Report · page '+p.portrait.source.page):'Pilot portrait'}</small></article>`).join('');}).join('')||'<p>No portraits match these filters. Living-person portraits follow the switch above.</p>';
     $('#morePortraits').hidden=total<=portraitLimit;
   }
+  function renderSourceLists(){
+    const all=[...documents,...(window.ArchiveItems?.pendingReports(documents)||[])];
+    $('#reportLibrary').innerHTML=all.map((d,i)=>`<article class="report-tile"><a href="${escape(d.pending?'#archive?item='+d.importItemId:Model.link({report:d.id}))}" ${d.pending?'data-archive-item="'+escape(d.importItemId)+'"':''}><small>${String(i+1).padStart(2,'0')} / ${d.pending?'SAVED SOURCE':'FAMILY REPORT'}</small><strong>${escape(d.title.replace(/^Descendants of /,''))}</strong></a>${d.pending?'<span>Awaiting incorporation · open saved item for progress</span>':sourceLink({reportId:d.id,page:1},d.pages+' pages · Read pages')}</article>`).join('');
+    window.ArchiveItems?.renderCollections();
+  }
   function applyDisplay(){
     profiles=window.ArchivePrivacy.project(rawProfiles,showLiving,privateDetails);
     index=new engine.Index(profiles);explorer.setData(profiles,treeData);
@@ -164,7 +169,7 @@
     $('#restrictedMetric').textContent=rawProfiles.filter(p=>p.restricted).length.toLocaleString();
     $('#sourceFilter').innerHTML='<option value="">All reports</option>'+facets.sources.map(s=>`<option value="${escape(s.id)}">${escape(s.title)}</option>`).join('');$('#sourceFilter').value=selected;
     $('#placeOptions').innerHTML=facets.places.map(p=>`<option value="${escape(p)}"></option>`).join('');
-    $('#reportLibrary').innerHTML=documents.map((d,i)=>`<article class="report-tile"><a href="${escape(Model.link({report:d.id}))}"><small>0${i+1} / DESCENDANT REPORT</small><strong>${escape(d.title.replace(/^Descendants of /,''))}</strong></a>${sourceLink({reportId:d.id,page:1},d.pages+' pages · Read pages')}</article>`).join('');
+    renderSourceLists();
     $('#pilotOriginalSource').hidden=!documents.some(d=>d.id==='brimage-gatling');
     const gallerySource=$('#portraitSource').value;$('#portraitSource').innerHTML='<option value="">All reports</option>'+facets.sources.map(s=>`<option value="${escape(s.id)}">${escape(s.title)}</option>`).join('');$('#portraitSource').value=gallerySource;
     renderGallery();window.PhotoWorkspace?.archiveChanged();window.ArchiveItems?.archiveChanged();
@@ -262,7 +267,7 @@
   $('#sourcePageImage').addEventListener('error',()=>{$('#sourcePageStatus').textContent='This page could not load. Try another page, or open the original PDF below.';});
   async function loadPageText(){const doc=window.SourceDocuments.source(documents,route.document,route.page);if(!doc?.pageText)return;const key=doc.pageText;$('#sourcePageTranscript').textContent='Loading text…';try{const response=await fetch(key,{cache:'no-store'});if(!response.ok)throw Error();const text=await response.text();if(window.SourceDocuments.source(documents,route.document,route.page)?.pageText===key&&!$('#sourceViewer').hidden)$('#sourcePageTranscript').textContent=text||'No text was extracted from this page.';}catch{if(window.SourceDocuments.source(documents,route.document,route.page)?.pageText===key)$('#sourcePageTranscript').textContent='Page text is unavailable. Read the image above or open the original PDF.';}}
   $('#sourcePageText').addEventListener('toggle',()=>{if($('#sourcePageText').open)loadPageText();});
-  window.ArchiveApp={get profiles(){return profiles;},get snapshotId(){return sourceArchive?.snapshotId;},get profileAliases(){return idAliases;},get family(){return explorer.family;},get documents(){return documents;},get showLiving(){return showLiving;},get selectedProfile(){return profiles.find(p=>p.id===route.person);},get currentSource(){return window.SourceDocuments.source(documents,route.document,route.page);},setItemRoute(id){route.item=id;route.items=id?'':'1';route.person='';route.document='';closeSource(false);window.LFW.showView('archive',false);renderResults();writeRoute(true);},search(query,source=''){return index?index.search(query,{source,fuzzy:true}).slice(0,30).map(x=>x.profile):[];},openProfile,openSource};
+  window.ArchiveApp={get ready(){return !loading&&!loadError&&!!index;},get unidentifiedPortraits(){return sourceArchive.unidentifiedPortraits||[];},reload:loadArchive,refreshSources:renderSourceLists,get profiles(){return profiles;},get snapshotId(){return sourceArchive?.snapshotId;},get profileAliases(){return idAliases;},get family(){return explorer.family;},get documents(){return documents;},get showLiving(){return showLiving;},get selectedProfile(){return profiles.find(p=>p.id===route.person);},get currentSource(){return window.SourceDocuments.source(documents,route.document,route.page);},setItemRoute(id){route.item=id;route.items=id?'':'1';route.person='';route.document='';closeSource(false);window.LFW.showView('archive',false);renderResults();writeRoute(true);},search(query,source=''){return index?index.search(query,{source,fuzzy:true}).slice(0,30).map(x=>x.profile):[];},openProfile,openSource};
   window.addEventListener('hashchange',restoreRoute);
   window.addEventListener('popstate',restoreRoute);
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.search-widget'))closePanels();});
@@ -288,7 +293,7 @@
       let tree=null;
       try{const response=await fetch('archive-tree.json',{cache:'no-store',signal:abort.signal});if(response.ok)tree=await response.json();}catch{}
       if(data.snapshotId&&tree?.snapshotId!==data.snapshotId)throw Error('snapshot-mismatch');
-      treeData=tree;applyDisplay();$('#showLiving').disabled=!data.livingDetailsAvailable;
+      treeData=tree;privateReady=false;privateDetails={};if(showLiving){const response=await fetch('archive-private-details.json',{cache:'no-store'});if(!response.ok)throw Error('private-unavailable');const details=await response.json();if(details.snapshotId!==data.snapshotId)throw Error('snapshot-mismatch');privateDetails=details.profiles||{};privateReady=true;}applyDisplay();$('#showLiving').disabled=!data.livingDetailsAvailable;
       $('#archiveValidation').hidden=!data.validation;
       if(data.validation)$('#archiveValidation').textContent=`Rebuilt from ${data.validation.reports} reports · ${data.validation.citedRelationships.toLocaleString()} cited relationships · ${data.validation.reviewItems||0} extraction items awaiting review · ${data.validation.identityReviewCount||0} profiles need same-name review. Report claims are not independent verification.`;
       loadError='';
@@ -297,7 +302,7 @@
       loadError=error.message==='missing'?'The public code does not include family data. The full archive is available only in the private Sites preview.':'The archive could not be loaded. Check your connection, then try again.';
       ['profileMetric','placeMetric','restrictedMetric'].forEach(id=>$('#'+id).textContent='—');
     } finally {
-      clearTimeout(timer);loading=false;if(location.hash.startsWith('#archive'))restoreRoute();else runSearch();controllers.filter(c=>document.activeElement===c.input).forEach(c=>c.refresh());
+      clearTimeout(timer);loading=false;window.ArchiveImport?.queue();if(location.hash.startsWith('#archive'))restoreRoute();else runSearch();controllers.filter(c=>document.activeElement===c.input).forEach(c=>c.refresh());
     }
   }
   setScope('all');loadArchive();

@@ -4,7 +4,7 @@ const itemFailure=(message,status=400)=>Object.assign(Error(message),{status});
 const itemPublic=(row,catalog)=>{
   const item=JSON.parse(row.body);
   item.people=(item.people||[]).map(id=>{try{return globalThis.ArchiveItemRules.canonicalPerson(id,catalog);}catch{return id;}});
-  return {...item,revision:row.revision,createdAt:row.created_at,updatedAt:row.updated_at};
+  return {...item,contentHash:row.content_hash||null,revision:row.revision,createdAt:row.created_at,updatedAt:row.updated_at};
 };
 async function itemBytes(request,max){
   if(Number(request.headers.get('content-length'))>max)throw itemFailure('Choose a file up to 20 MB.',413);
@@ -22,7 +22,7 @@ export async function handleArchiveItems(request,env,catalog){
     if(!env.DB)throw Error('Archive database unavailable.');
     const db=env.DB;
     if(request.method==='GET'&&!id){
-      const result=await db.prepare('SELECT body, revision, created_at, updated_at FROM archive_items WHERE owner_id = ? ORDER BY updated_at DESC, id').bind(owner).all();
+      const result=await db.prepare('SELECT body, content_hash, revision, created_at, updated_at FROM archive_items WHERE owner_id = ? ORDER BY updated_at DESC, id').bind(owner).all();
       return itemJson({items:result.results.map(row=>itemPublic(row,catalog))});
     }
     const existing=id?(await db.prepare('SELECT * FROM archive_items WHERE owner_id = ? AND id = ?').bind(owner,id).all()).results[0]:null;

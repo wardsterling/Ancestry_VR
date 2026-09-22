@@ -78,6 +78,13 @@
     claim.evidenceIds=[...new Set([...claim.evidenceIds,evidence.id])];
     return {...validate(value,catalog),revision:photo.revision||0};
   }
+  function awaitingIdentification(photo,catalog={}){
+    const value=redirectReferences(photo,catalog);
+    if(value.unidentifiedPeople)return true;
+    return !(value.claims||[]).some(c=>c.status!=='rejected'&&c.profileId&&
+      (!catalog.profileIds||catalog.profileIds.includes(c.profileId))&&
+      c.evidenceIds?.some(id=>value.evidence?.some(e=>e.id===id)));
+  }
   function status(photo){return photo.claims?.some(c=>c.status==='confirmed')?(photo.unidentifiedPeople?'partly identified':'confirmed'):photo.claims?.some(c=>c.status==='proposed')?'proposed':'unidentified';}
   function cropStyle(rect){const [x,y,w,h]=rectangle(rect);return `aspect-ratio:${w}/${h};background-size:${10000/w}% ${10000/h}%;background-position:${w===100?0:x/(100-w)*100}% ${h===100?0:y/(100-h)*100}%`;}
   function fromPoints(a,b){const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y);return rectangle([x,y,Math.abs(a.x-b.x),Math.abs(a.y-b.y)]);}
@@ -96,5 +103,5 @@
     const groups=new Map();for(const {key,profile} of rows){if(!groups.has(key))groups.set(key,[]);groups.get(key).push(profile);}
     return [...groups].sort(([a],[b])=>a.localeCompare(b,undefined,{numeric:true})).map(([label,people])=>({label,people:people.sort((a,b)=>sort==='oldest'?((a.birthYear||9999)-(b.birthYear||9999))||a.name.localeCompare(b.name):sort==='surname'?a.name.split(' ').at(-1).localeCompare(b.name.split(' ').at(-1))||a.name.localeCompare(b.name):a.name.localeCompare(b.name))}));
   }
-  return {validate,rectangle,fromPoints,safeUrl,status,cropStyle,groupPortraits,connectSourcePerson,redirectReferences};
+  return {awaitingIdentification,validate,rectangle,fromPoints,safeUrl,status,cropStyle,groupPortraits,connectSourcePerson,redirectReferences};
 });

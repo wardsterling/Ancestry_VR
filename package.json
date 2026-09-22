@@ -8,6 +8,8 @@
   },
   "devDependencies": {
     "drizzle-kit": "0.31.10",
-    "drizzle-orm": "0.45.2"
+    "drizzle-orm": "0.45.2",
+    "pdfjs-dist": "6.3.289",
+    "pyodide": "314.0.7"
   }
 }

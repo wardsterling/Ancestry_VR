@@ -49,7 +49,7 @@
     if(unique.length<2)return unique[0]||'Not recorded';
     return 'Conflicting records';
   }
-  function safePortrait(src){return typeof src==='string'&&/^assets\/[\w/-]+\.(?:jpe?g|png|webp|avif)$/i.test(src)&&!src.includes('..')?src:'';}
+  function safePortrait(src){return typeof src==='string'&&!src.includes('..')&&(/^assets\/[\w/-]+\.(?:jpe?g|png|webp|avif)$/i.test(src)||/^\/api\/archive-imports\/item-[a-zA-Z0-9_-]+\/assets\/[a-f0-9]{64}\/portrait-\d+-\d+\.jpg$/.test(src))?src:'';}
   function describe(p,pilotPeople={}){
     const initials=p.name.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('');
     if(p.restricted)return {birthDate:'Restricted',birthPlace:'Restricted',deathDate:'Restricted',portrait:'',initials,photoLabel:'Photo restricted'};

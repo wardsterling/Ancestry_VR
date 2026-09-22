@@ -299,3 +299,17 @@ test('source connection save failures keep the citation draft and living-person 
  assert.equal(living.nodes.get('sourceConnectionForm').hidden,true);assert.match(living.nodes.get('sourcePersonDetails').innerHTML,/Turn on/);
  living.nodes.get('sourceConnectionNote').value='Should not save';living.nodes.get('saveSourceConnection').emit('click');await tick();assert.equal(living.photoSaved.length,0);
 });
+test('an earlier saved source connection moves to connected portraits on reload',async()=>{
+ const photo={id:'wall-known',kind:'wall',title:'Connected photograph',rect:[0,0,10,10],claims:[{id:'claim',profileId:'synthetic',label:'',status:'proposed',evidenceIds:['evidence']}],evidence:[{id:'evidence',kind:'report',reportId:'demo',page:1,note:'Existing source connection'}],revision:1};
+ const app=await setup(false,'#wall',false,fixture,null,null,{regions:[{...photo,claims:[],evidence:[]}],saved:[photo]});
+ assert(!app.nodes.get('unknownPortraits').innerHTML.includes('data-photo-id="wall-known"'));
+ assert(app.nodes.get('connectedPortraits').innerHTML.includes('data-photo-id="wall-known"'));
+ assert.match(app.nodes.get('connectedPortraits').innerHTML,/confirmation pending/);
+});
+test('saved PDFs update source collections and the family-report library before processing',async()=>{
+ const item={id:'item-new-source',kind:'file',title:'Synthetic new report.pdf',collection:'New family sources',file:{name:'Synthetic new report.pdf',type:'application/pdf',size:100},people:[],updatedAt:'2026-01-01T00:00:00Z'};
+ const app=await setup(false,'#archive',false,fixture,null,null,null,{saved:[item]});
+ assert.match(app.nodes.get('sourceCollectionList').innerHTML,/New family sources/);
+ assert.match(app.nodes.get('reportLibrary').innerHTML,/Synthetic new report/);
+ assert.match(app.nodes.get('reportLibrary').innerHTML,/data-archive-item="item-new-source"/);
+});
