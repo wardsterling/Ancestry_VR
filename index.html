@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#172e2a">
+  <meta name="description" content="An evidence-grounded, interactive family history wall.">
+  <title>The Living Family Wall</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <button class="brand" data-nav="wall" aria-label="Go to family wall">
+      <span class="brand-mark" aria-hidden="true">LW</span>
+      <span><strong>The Living Family Wall</strong><small>This is my piece of the wall.</small></span>
+    </button>
+    <nav aria-label="Primary navigation">
+      <button class="nav-button active" data-nav="wall">Explore wall</button>
+      <button class="nav-button" data-nav="archive">Archive</button>
+      <button class="nav-button" data-nav="curator">Curator</button>
+    </nav>
+    <button id="helpButton" class="icon-button" aria-label="Open help">?</button>
+  </header>
+
+  <main id="main">
+    <section id="wallView" class="view active" aria-labelledby="wallTitle">
+      <div class="section-heading">
+        <div><p class="eyebrow">Ward Family picture wall · pilot</p><h1 id="wallTitle">Point, select, and begin a story</h1></div>
+        <div class="mode-switch" role="group" aria-label="Explore mode">
+          <button id="wallMode" class="active">Wall photo</button><button id="cameraMode">Camera</button>
+        </div>
+      </div>
+
+      <div class="wall-layout">
+        <div class="wall-stage card">
+          <div id="cameraNotice" class="camera-notice hidden" role="status">
+            <strong>Camera preview</strong><span id="cameraStatus">Choose “Start camera” to scan a registered wall.</span>
+            <button id="startCamera" class="primary small">Start camera</button>
+          </div>
+          <video id="cameraFeed" class="hidden" autoplay playsinline muted aria-label="Live camera preview"></video>
+          <div id="wallCanvas" class="wall-canvas" aria-label="Interactive photograph of the Ward Family picture wall">
+            <img src="assets/family-wall.jpg" alt="Wide photograph of the Ward Family picture wall, filled with framed family portraits">
+            <button class="hotspot confirmed" style="left:57%;top:42%" data-person="howard" aria-label="Open confirmed pilot profile for Howard Pearson Kennedy"><span>1</span></button>
+            <button class="hotspot unassigned" style="left:78%;top:54%" data-unassigned aria-label="Unassigned photograph"><span>?</span></button>
+            <button class="hotspot unassigned" style="left:22%;top:51%" data-unassigned aria-label="Unassigned photograph"><span>?</span></button>
+          </div>
+          <div class="stage-toolbar">
+            <span><i class="legend-dot confirmed"></i> Family confirmed</span>
+            <span><i class="legend-dot unassigned"></i> Needs identification</span>
+            <button id="searchPerson" class="text-button">Search by name</button>
+          </div>
+        </div>
+
+        <aside class="discovery card" aria-labelledby="discoveryTitle">
+          <p class="eyebrow">Ready to explore</p><h2 id="discoveryTitle">One pilot profile is connected</h2>
+          <p class="muted">Select the numbered marker to meet Howard Pearson Kennedy through family-reviewed records.</p>
+          <button class="profile-preview" data-person="howard">
+            <img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy, reproduced from the descendant report">
+            <span><strong>Howard Pearson Kennedy</strong><small>1901–1978 · Worcester, Massachusetts</small><em>Open his piece of the wall →</em></span>
+          </button>
+          <div class="safety-note"><span aria-hidden="true">◆</span><p><strong>Evidence first</strong><br>Every biographical response links to its source. AI interpretation is always labeled.</p></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="profileView" class="view" aria-labelledby="profileName">
+      <button class="back-button" data-nav="wall">← Back to wall</button>
+      <div class="profile-hero card">
+        <img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy, reproduced from page 9 of the Brimage descendant report">
+        <div class="profile-copy"><p class="eyebrow">Family-confirmed pilot profile</p><h1 id="profileName">Howard Pearson Kennedy</h1><p class="dates">1901–1978 · Physician · Educator</p>
+          <p>This profile is built from a family descendant report. It is not a simulation of consciousness or recovered memory.</p>
+          <div class="profile-actions"><button class="primary" id="beginConversation">Begin conversation</button><button class="secondary" id="viewTimeline">View timeline</button></div>
+        </div>
+        <div class="record-health"><span>Source readiness</span><strong>Reviewed pilot</strong><meter min="0" max="100" value="75">75%</meter><small>One report connected · more primary sources needed</small></div>
+      </div>
+      <div class="profile-grid">
+        <section class="card facts"><div class="card-heading"><h2>Documented facts</h2><button class="text-button evidence-trigger" data-evidence="report9">Show evidence</button></div><dl>
+          <div><dt>Born</dt><dd>February 11, 1901<br><small>Worcester, Massachusetts</small></dd></div>
+          <div><dt>Education</dt><dd>B.A., Howard University, 1924<br>M.D., Meharry Medical College, 1930</dd></div>
+          <div><dt>Married</dt><dd>Marian Julia Hill<br><small>January 7, 1925 · New Bern, North Carolina</small></dd></div>
+          <div><dt>Died</dt><dd>December 31, 1978<br><small>Springfield, Massachusetts</small></dd></div>
+        </dl></section>
+        <section class="card relationships"><h2>People connected in this source</h2>
+          <button class="relative-card" data-person="marian"><img src="assets/marian-hill.jpg" alt="Marian Julia Hill, reproduced from the report"><span><strong>Marian Julia Hill</strong><small>Wife · 1903–1980</small></span></button>
+          <button class="relative-card" data-person="melvin"><img src="assets/melvin-kennedy.jpg" alt="Melvin Dow Kennedy, reproduced from the report"><span><strong>Melvin Dow Kennedy</strong><small>Brother · 1905–1989</small></span></button>
+          <p class="muted compact">These relationships are stated in the descendant report and should be corroborated with original records.</p>
+        </section>
+      </div>
+    </section>
+
+    <section id="conversationView" class="view conversation-view" aria-labelledby="conversationTitle">
+      <div class="conversation-header"><button class="back-button" data-nav="profile">← Howard’s profile</button><div><p class="eyebrow">Family-history guide mode</p><h1 id="conversationTitle">Conversation about Howard</h1></div><button id="modeInfo" class="secondary small">About this mode</button></div>
+      <div class="conversation-layout">
+        <aside class="speaker card"><img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy"><h2>Howard Pearson Kennedy</h2><p class="mode-label">Narrated from approved evidence</p><hr><p class="muted compact"><strong>Character mode is off.</strong> Answers use a third-person guide so the system does not pretend to be Howard.</p></aside>
+        <section class="chat card" aria-label="Conversation">
+          <div id="messages" class="messages" aria-live="polite"></div>
+          <div class="suggestions" aria-label="Suggested questions"><button>Who was Howard?</button><button>Where did he study?</button><button>Who was his wife?</button><button>What remains uncertain?</button></div>
+          <form id="chatForm"><label class="sr-only" for="question">Ask about Howard</label><input id="question" autocomplete="off" placeholder="Ask a question about Howard…"><button class="primary" type="submit">Ask</button></form>
+          <p class="chat-disclaimer">Prototype answers come only from the reviewed sample dataset. Unsupported questions receive an honest limitation.</p>
+        </section>
+      </div>
+    </section>
+
+    <section id="archiveView" class="view" aria-labelledby="archiveTitle">
+      <div class="section-heading"><div><p class="eyebrow">Digital family archive</p><h1 id="archiveTitle">Sources, people, and connections</h1></div><button class="primary" id="addItem">+ Add archive item</button></div>
+      <div class="metrics"><div><strong>1</strong><span>Published source</span></div><div><strong>3</strong><span>Linked people</span></div><div><strong>1</strong><span>Wall assignment</span></div><div><strong>2</strong><span>Review questions</span></div></div>
+      <div class="archive-grid">
+        <article class="archive-item card"><img src="assets/brimage-report-page-9.jpg" alt="Page 9 of the Descendants of Minger Brimage report"><div><span class="status">Published for pilot</span><h2>Descendants of Minger Brimage</h2><p>Page 9 · Howard Pearson Kennedy, Marian Julia Hill, and Melvin Dow Kennedy</p><p class="metadata">Type: compiled descendant report<br>Created: April 7, 2008<br>Repository: family collection</p><button class="secondary evidence-trigger" data-evidence="report9">Open source page</button></div></article>
+        <section class="card workflow"><h2>Item readiness</h2><ol><li class="done">Original preserved</li><li class="done">People and source linked</li><li class="done">Transcription reviewed</li><li class="done">Privacy checked</li><li class="current">Corroborate with primary records</li></ol></section>
+      </div>
+    </section>
+
+    <section id="curatorView" class="view" aria-labelledby="curatorTitle">
+      <div class="section-heading"><div><p class="eyebrow">Curator workspace</p><h1 id="curatorTitle">Register the family wall</h1></div><div><button class="secondary" id="importData">Import</button> <button class="primary" id="exportData">Export data</button></div></div>
+      <div class="curator-grid">
+        <section class="card"><h2>Confirmed assignments</h2><div class="assignment"><img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy"><div><strong>Howard Pearson Kennedy</strong><small>Wall position: 57% × 42%</small><span class="status">Family confirmed</span></div><button class="icon-button" aria-label="Edit assignment">•••</button></div><button id="registerPhoto" class="secondary wide">+ Register another photograph</button></section>
+        <section class="card"><h2>Review queue</h2><div class="review-row"><span class="review-count">2</span><p><strong>Unidentified wall photographs</strong><small>Assign a person or record as unknown</small></p></div><div class="review-row"><span class="review-count amber">2</span><p><strong>Evidence questions</strong><small>Education and marriage need primary records</small></p></div></section>
+        <section class="card privacy"><h2>Privacy defaults</h2><label><input type="checkbox" checked disabled> Living people hidden from public view</label><label><input type="checkbox" checked disabled> Conversation respects item restrictions</label><label><input type="checkbox" checked disabled> Synthetic media clearly labeled</label><p class="muted compact">This MVP stores curator changes only in this browser. Export a backup before clearing browser data.</p></section>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="evidenceDialog"><button class="dialog-close" aria-label="Close">×</button><p class="eyebrow">Supporting source</p><h2>Descendants of Minger Brimage · page 9</h2><p class="source-note">Compiled family report created April 7, 2008. A report statement is evidence of what the compiler recorded—not automatic proof that every claim is correct.</p><img src="assets/brimage-report-page-9.jpg" alt="Full page 9 showing entries for Howard Pearson Kennedy, Marian Julia Hill, and Melvin Dow Kennedy"><div class="citation"><strong>Citation</strong><p><em>Descendants of Minger Brimage</em>, RootsMagic report, 7 April 2008, p. 9; family collection.</p></div></dialog>
+  <dialog id="genericDialog"><button class="dialog-close" aria-label="Close">×</button><div id="genericDialogContent"></div></dialog>
+  <input id="importFile" type="file" accept="application/json" hidden>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="data.js"></script><script src="app.js"></script>
+</body>
+</html>
