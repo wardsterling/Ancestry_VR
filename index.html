@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="archive.css">
   <link rel="stylesheet" href="archive-explorer.css">
   <link rel="stylesheet" href="report-edition.css">
+  <link rel="stylesheet" href="photo-workspace.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -55,30 +56,44 @@
             <button id="startCamera" class="primary small">Start camera</button>
           </div>
           <video id="cameraFeed" class="hidden" autoplay playsinline muted aria-label="Live camera preview"></video>
-          <div id="wallCanvas" class="wall-canvas" aria-label="Interactive photograph of the Ward Family picture wall">
-            <img src="assets/family-wall.jpg" alt="Wide photograph of the Ward Family picture wall, filled with framed family portraits">
-            <button class="hotspot confirmed" style="left:57%;top:42%" data-person="howard" aria-label="Open proposed pilot profile for Howard Pearson Kennedy; wall position needs family confirmation"><span>1</span></button>
-            <button class="hotspot unassigned" style="left:78%;top:54%" data-unassigned aria-label="Unassigned photograph"><span>?</span></button>
-            <button class="hotspot unassigned" style="left:22%;top:51%" data-unassigned aria-label="Unassigned photograph"><span>?</span></button>
+          <div class="wall-tools" role="group" aria-label="Wall zoom and photograph tools">
+            <button id="wallZoomOut" class="secondary" aria-label="Zoom out">−</button><label>Zoom <input id="wallZoom" type="range" min="100" max="600" step="10" value="100"></label><output id="wallZoomValue">100%</output><button id="wallZoomIn" class="secondary" aria-label="Zoom in">+</button><button id="wallFit" class="secondary">Fit wall</button>
+            <label><input id="wallMarkers" type="checkbox" checked> Picture outlines</label><button id="addWallPhoto" class="primary">Mark a picture</button>
           </div>
-          <div class="stage-toolbar">
-            <span><i class="legend-dot confirmed"></i> Pilot assignment—confirm</span>
-            <span><i class="legend-dot unassigned"></i> Needs identification</span>
-            <button id="searchPerson" class="text-button">Search by name</button>
+          <p class="wall-hint" id="wallHint">Pinch or use + / − to zoom. Drag to move. Tap a picture to explore its identity and sources.</p>
+          <div id="wallViewport" class="wall-viewport" tabindex="0" aria-label="Zoomable family wall. Use plus, minus and arrow keys to navigate.">
+            <div id="wallCanvas" class="wall-canvas"><img id="wallImage" src="assets/family-wall.jpg" draggable="false" alt="Wide photograph of the Ward Family picture wall, filled with framed family portraits"><div id="wallRegions"></div><div id="wallDraftRect" class="draft-rect" hidden></div></div>
           </div>
+          <div class="stage-toolbar"><span id="wallPhotoCount" role="status">Loading photograph regions…</span><button id="searchPerson" class="text-button">Search by name</button></div>
+          <details class="wall-picture-list"><summary>Browse photographs as a list</summary><div id="wallPictureList"></div></details>
         </div>
-
-        <aside class="discovery card" aria-labelledby="discoveryTitle">
-          <p class="eyebrow">Ready to explore</p><h2 id="discoveryTitle">One pilot profile is connected</h2>
-          <p class="muted">Select the numbered marker to meet Howard Pearson Kennedy through family-reviewed records.</p>
-          <button class="profile-preview" data-person="howard">
-            <img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy, reproduced from the descendant report">
-            <span><strong>Howard Pearson Kennedy</strong><small>1901–1978 · Worcester, Massachusetts</small><em>Open his piece of the wall →</em></span>
-          </button>
-          <div class="safety-note"><span aria-hidden="true">◆</span><p><strong>Evidence first</strong><br>Every biographical response links to its source. AI interpretation is always labeled.</p></div>
+        <aside id="photoNotebook" class="photo-notebook card" aria-labelledby="photoNotebookTitle">
+          <div class="notebook-heading"><div><p class="eyebrow">Photo research notebook</p><h2 id="photoNotebookTitle">Select a photograph</h2></div><button id="closePhotoNotebook" class="secondary" hidden>Close</button></div>
+          <p id="notebookConnection" role="status">Connecting your saved research…</p>
+          <div id="photoResearchEmpty"><p>Use names, inscriptions, dated records and family recollections to establish identity.</p><p>Outlines locate photographs. They do not identify the people in them.</p></div>
+          <div id="photoResearchEditor" hidden>
+            <div id="photoCrop" class="photo-crop" role="img" aria-label="Selected photograph"></div><p id="photoOrigin"></p><div class="notebook-actions"><button id="copyPhotoLink" class="secondary">Copy picture link</button><button id="exportPhotoDraft" class="secondary">Export draft</button></div>
+            <label>Picture label<input id="photoLabel" maxlength="160"></label>
+            <details><summary>Adjust picture boundary</summary><div class="rectangle-fields"><label>Left %<input id="photoX" type="number" min="0" max="100" step=".01"></label><label>Top %<input id="photoY" type="number" min="0" max="100" step=".01"></label><label>Width %<input id="photoW" type="number" min=".1" max="100" step=".01"></label><label>Height %<input id="photoH" type="number" min=".1" max="100" step=".01"></label></div></details>
+            <label class="evidence-choice"><input id="photoUnidentifiedPeople" type="checkbox"> This picture still contains unidentified people</label><label>Research notes<textarea id="photoNotes" rows="2" maxlength="4000" placeholder="Clothing, occasion, inscriptions, location or questions to investigate"></textarea></label>
+            <section><h3>People in this photograph</h3><div id="photoClaims"></div>
+              <details id="candidateTools"><summary>Find or propose a person</summary>
+                <label>Name, place or year<input id="photoPersonSearch" type="search" placeholder="Search archive records"></label><label>Family report<select id="photoFamilyFilter"><option value="">All reports</option></select></label><div id="photoCandidates" class="candidate-list" aria-live="polite"></div>
+                <p class="search-help">Suggestions use written records. More than one person may be linked to a group photograph.</p><label>Possible name absent from archive<input id="photoPossibleName" maxlength="240"></label><button id="addPossiblePerson" class="secondary">Add proposed name</button><a id="choosePersonTree" class="secondary" href="#archive">Choose from family tree</a>
+              </details>
+            </section>
+            <section><h3>Evidence for identity</h3><div id="photoEvidence"></div><details id="evidenceTools"><summary>Add a source or recollection</summary>
+              <label>Evidence type<select id="evidenceKind"><option value="report">Report page</option><option value="link">External record or image link</option><option value="inscription">Written caption or inscription</option><option value="recollection">Family recollection</option></select></label>
+              <div id="reportEvidenceFields"><label>Report<select id="evidenceReport"></select></label><label>Page<input id="evidencePage" type="number" min="1" value="1"></label></div>
+              <label id="urlEvidenceField" hidden>Source URL<input id="evidenceUrl" type="url" placeholder="https://…"></label><label>Who supplied it / collection<input id="evidenceAttribution" maxlength="240" placeholder="Name, date of interview, album or record collection"></label><label>What does it establish?<textarea id="evidenceNote" rows="3" maxlength="2000" placeholder="Transcribe the caption or explain how the source supports or contradicts an identity"></textarea></label><button id="addPhotoEvidence" class="secondary">Add evidence</button>
+            </details></section>
+            <p class="search-help">Select supporting evidence beside a proposed name before confirming it. Confirmation records your assessment; it does not alter the source report.</p>
+            <p id="photoSaveStatus" role="status"></p><button id="savePhotoResearch" class="primary wide">Save photograph research</button>
+          </div>
         </aside>
       </div>
-      <section class="portrait-gallery card"><div class="gallery-heading"><div><h2>Portraits from your reports</h2><p id="portraitSummary">Loading source photographs…</p></div><a class="secondary" href="#archive">Explore the family tree</a></div><div id="portraitGallery" class="portrait-gallery-grid"></div><button id="morePortraits" class="secondary" hidden>Show more portraits</button></section>
+      <section class="portrait-gallery card"><div class="gallery-heading"><div><h2>Portraits from your reports</h2><p id="portraitSummary">Loading source photographs…</p></div><a class="secondary" href="#archive">Explore the family tree</a></div><div class="portrait-tools"><label>Sort / group<select id="portraitSort"><option value="name">Name A–Z</option><option value="surname">Surname A–Z</option><option value="source">Source report</option><option value="family">Parent / family group</option><option value="generation">Report generation</option><option value="oldest">Birth date, oldest first</option></select></label><label>Source<select id="portraitSource"><option value="">All reports</option></select></label><label>Find a portrait<input id="portraitQuery" type="search" placeholder="Name or place"></label></div><div id="portraitGallery" class="portrait-gallery-grid"></div><button id="morePortraits" class="secondary" hidden>Show more portraits</button></section>
+      <section class="unknown-portraits card" aria-labelledby="unknownPortraitTitle"><div class="gallery-heading"><div><h2 id="unknownPortraitTitle">Awaiting identification</h2><p id="unknownPortraitSummary" role="status"></p></div><label>Photographs<select id="unknownPortraitSource"><option value="all">Wall and reports</option><option value="report">Reports only</option><option value="wall">Wall only</option></select></label></div><div id="unknownPortraits" class="portrait-gallery-grid"></div><button id="moreUnknownPortraits" class="secondary" hidden>Show more unidentified photographs</button></section>
     </section>
 
     <section id="profileView" class="view" aria-labelledby="profileName">
@@ -167,10 +182,15 @@
         </section>
         <div id="treeStage" class="tree-stage"><nav id="treeBreadcrumb" aria-label="Tree focus"></nav><div id="treeScene" class="tree-scene"></div></div>
         <p id="treeNote" class="search-help"></p>
-        </div><aside id="profileDetails" class="inline-profile card" aria-label="Selected person and source evidence" hidden><button id="closeProfileDetails" class="secondary small">Close details</button><div id="profileDialogContent"></div></aside></div>
+        </div><aside id="profileDetails" class="inline-profile card" aria-label="Selected person and source evidence" hidden><button id="closeProfileDetails" class="secondary small">Close details</button><button id="linkTreePerson" class="primary wide" hidden>Propose this person for selected photograph</button><div id="profileDialogContent"></div></aside></div>
         <div id="hiveResults" hidden></div>
       </section>
-      <section id="sourceViewer" class="source-viewer card" aria-labelledby="sourceViewerTitle" hidden><header><div><p class="eyebrow">Original source document</p><h2 id="sourceViewerTitle"></h2></div><button id="closeSourceViewer" class="secondary">Close PDF</button></header><p class="search-help">Original PDFs are unredacted and may contain living-person details.</p><div class="source-viewer-tools"><a id="sourceOpenOriginal" class="primary" target="_blank" rel="noopener">Open original PDF in a new tab</a><a id="sourceDownload" class="secondary" download>Download original</a><label>Page <input id="sourcePage" type="number" min="1" value="1"></label><button id="sourcePageGo" class="secondary">Go</button></div><iframe id="sourcePdfFrame" title="Original descendant report PDF" loading="lazy"></iframe><p class="search-help">If your browser does not display every PDF page here, use “Open original PDF in a new tab.”</p></section>
+      <section id="sourceViewer" class="source-viewer card" aria-labelledby="sourceViewerTitle" hidden>
+        <header><div><p class="eyebrow">Source document · page preview</p><h2 id="sourceViewerTitle"></h2></div><button id="closeSourceViewer" class="secondary">Close source</button></header><p class="search-help">Original pages are unredacted and may contain living-person details.</p>
+        <div class="source-viewer-tools"><button id="sourcePrevious" class="secondary">← Previous page</button><label>Page <input id="sourcePage" type="number" min="1" value="1"></label><button id="sourcePageGo" class="secondary">Go</button><button id="sourceNext" class="primary">Next page →</button><label>Page zoom<select id="sourceZoom"><option value="100">Fit width</option><option value="150">150%</option><option value="200">200%</option></select></label><button id="markSourcePhoto" class="secondary">Mark unidentified portrait</button><button id="citeSourcePhoto" class="secondary" hidden>Cite for selected photograph</button></div>
+        <p id="sourcePageStatus" role="status"></p><div id="sourcePageViewport" class="source-page-viewport"><div id="sourcePageCanvas" class="source-page-canvas"><img id="sourcePageImage" alt="" loading="lazy"><div id="sourceDraftRect" class="draft-rect" hidden></div></div></div><details id="sourcePageText"><summary>Read extracted page text</summary><pre id="sourcePageTranscript"></pre></details>
+        <iframe id="sourcePdfFrame" title="Original descendant report PDF" loading="lazy" hidden></iframe><div class="source-viewer-tools"><a id="sourceOpenOriginal" class="secondary" target="_blank" rel="noopener">Open original PDF</a><a id="sourceDownload" class="secondary" download>Download original</a></div>
+      </section>
       <div id="archiveResults" class="profile-results" aria-live="polite"></div>
       <button id="loadMore" class="secondary load-more" hidden>Show more profiles</button>
       <section class="source-collections"><h2>Source collections</h2><div class="source-grid"><article class="card"><strong>Brimage–Gatling</strong><span>40-page report · 2008</span></article><article class="card"><strong>Thomas Pinn</strong><span>110-page report · 2016</span></article><article class="card"><strong>Edward Turner</strong><span>87-page report · 2016</span></article><article class="card"><strong>Patrick Lee</strong><span>91-page report · 2016</span></article></div></section>
@@ -179,9 +199,9 @@
     <section id="curatorView" class="view" aria-labelledby="curatorTitle">
       <div class="section-heading"><div><p class="eyebrow">Curator workspace</p><h1 id="curatorTitle">Register the family wall</h1></div><div><button class="secondary" id="importData">Import</button> <button class="primary" id="exportData">Export data</button></div></div>
       <div class="curator-grid">
-        <section class="card"><h2>Pilot assignments</h2><div class="assignment"><img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy"><div><strong>Howard Pearson Kennedy</strong><small>Proposed wall position: 57% × 42%</small><span class="status">Needs family confirmation</span></div><button class="icon-button" aria-label="Edit assignment">•••</button></div><button id="registerPhoto" class="secondary wide">+ Register another photograph</button></section>
-        <section class="card"><h2>Review queue</h2><div class="review-row"><span class="review-count">2</span><p><strong>Unidentified wall photographs</strong><small>Assign a person or record as unknown</small></p></div><div class="review-row"><span class="review-count amber">2</span><p><strong>Evidence questions</strong><small>Education and marriage need primary records</small></p></div></section>
-        <section class="card privacy"><h2>Privacy defaults</h2><label><input type="checkbox" checked disabled> Living people hidden from public view</label><label><input type="checkbox" checked disabled> Conversation respects item restrictions</label><label><input type="checkbox" checked disabled> Synthetic media clearly labeled</label><p class="muted compact">This MVP stores curator changes only in this browser. Export a backup before clearing browser data.</p></section>
+        <section class="card"><h2>Photograph assignments</h2><p id="curatorPhotoSummary">Open the notebook to review photo identities and their evidence.</p><button id="registerPhoto" class="secondary wide">+ Register another photograph</button></section>
+        <section class="card"><h2>Review queue</h2><div id="curatorReviewQueue"></div><a href="#wall?unidentified=1" class="secondary">Review unidentified photographs</a></section>
+        <section class="card privacy"><h2>Privacy defaults</h2><label><input type="checkbox" checked disabled> Living people hidden from public view</label><label><input type="checkbox" checked disabled> Conversation respects item restrictions</label><label><input type="checkbox" checked disabled> Synthetic media clearly labeled</label><p class="muted compact">Photo research is saved to your private notebook across sessions. Export a backup to keep a separate copy.</p></section>
       </div>
     </section>
   </main>
@@ -190,6 +210,6 @@
   <dialog id="genericDialog"><button class="dialog-close" aria-label="Close">×</button><div id="genericDialogContent"></div></dialog>
   <input id="importFile" type="file" accept="application/json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-privacy.js"></script><script src="source-viewer.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="search-ui.js"></script>
+  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-privacy.js"></script><script src="source-viewer.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="photo-research.js"></script><script src="search-ui.js"></script><script src="photo-workspace.js"></script>
 </body>
 </html>

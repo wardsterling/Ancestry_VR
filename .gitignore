@@ -17,3 +17,7 @@ __pycache__/
 *.pyc
 .env*
 .sites-runtime/
+
+node_modules/
+source-pages/
+wall-catalog.json

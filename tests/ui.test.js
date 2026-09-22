@@ -9,19 +9,23 @@ const ArchiveModel=require('../archive-model');
 const ProfilePresentation=require('../profile-presentation');
 const ArchivePrivacy=require('../archive-privacy');
 const SourceDocuments=require('../source-viewer');
+const PhotoResearch=require('../photo-research');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=fs.readFileSync(path.join(__dirname,'../search-ui.js'),'utf8');
 const fixture={profiles:[{id:'synthetic',name:'Example Test Person',aliases:['Tester'],birthYear:1800,deathYear:1870,
   years:['1800','1870'],places:['Demo City, VA'],facts:['Synthetic statement only.'],sources:[{reportId:'demo',title:'Synthetic report',page:1}],restricted:false}]};
-async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null) {
+async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null) {
   const nodes=new Map(), scopes=[];
   class Element {
-    constructor(id,tag='DIV'){this.id=id;this.tagName=tag;this.value='';this.checked=false;this.hidden=false;this.open=false;this.textContent='';this.dataset={};this.attributes={};this.handlers={};this.options=[];this.selectedIndex=0;this.classList={toggle(){}};this.style={setProperty(){}};nodes.set(id,this);}
+    constructor(id,tag='DIV'){this.id=id;this.tagName=tag;this.value='';this.checked=false;this.hidden=false;this.open=false;this.textContent='';this.dataset={};this.attributes={};this.handlers={};this.options=[];this.selectedIndex=0;this.classList={toggle(){}};this.style={setProperty(){}};this.classList={toggle(){},add(){},remove(){}};this.scrollLeft=0;this.scrollTop=0;this.clientWidth=1000;this.clientHeight=400;nodes.set(id,this);}
     set innerHTML(value){this.markup=value;
       this.options=[...value.matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(m=>({value:m[1],text:m[2]}));
       for(const m of value.matchAll(/\sid="([^"]+)"/g))if(!nodes.has(m[1]))new Element(m[1]);
     }
     get innerHTML(){return this.markup||'';}
+    set outerHTML(value){this.innerHTML=value;}
+    getBoundingClientRect(){return {left:0,top:0,width:1536,height:387};}
+    setPointerCapture(){} scrollTo(x,y){this.scrollLeft=x;this.scrollTop=y;} scrollBy({left,top}){this.scrollLeft+=left;this.scrollTop+=top;}
     insertAdjacentHTML(position,text){this.innerHTML=position==='afterbegin'?text+this.innerHTML:this.innerHTML+text;}
     addEventListener(type,fn){(this.handlers[type] ||= []).push(fn);}
     emit(type,extra={}){const e={target:this,key:'',preventDefault(){this.prevented=true;},...extra};for(const fn of this.handlers[type]||[])fn(e);return e;}
@@ -43,13 +47,20 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   const location={hash,href:'https://example.test/'+hash};
   const history={pushState(a,b,url){location.hash=url;location.href='https://example.test/'+url;},replaceState(a,b,url){this.pushState(a,b,url);}};
   const events={};
-  const window={FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
+  const window={PhotoResearch,innerWidth:1400,confirm:()=>true,FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
   const metadata=treeData||{memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
-  const context=vm.createContext({window,document,location,history,navigator:{},URL,URLSearchParams,fetch:async url=>({ok:!missing&&!(treeMissing&&url==='archive-tree.json'),status:missing?404:200,json:async()=>structuredClone(url==='archive-tree.json'?metadata:url==='archive-private-details.json'?privateData:archive)}),AbortController,setTimeout,clearTimeout});
+  const photoSaved=[],photoRequests=[];
+  const fetcher=async (url,options={})=>{
+    if(url==='wall-catalog.json')return {ok:true,json:async()=>({regions:photoData?.regions||[]})};
+    if(url.startsWith('/api/photo-research')){photoRequests.push({url,options});if(options.method==='PUT'){if(photoData?.saveFailure)return {ok:false,json:async()=>({error:'Synthetic storage failure'})};const record={...JSON.parse(options.body),revision:1};photoSaved.push(record);return {ok:true,json:async()=>({record})};}return {ok:true,json:async()=>({records:photoData?.saved||[]})};}
+    return {ok:!missing&&!(treeMissing&&url==='archive-tree.json'),status:missing?404:200,text:async()=>('Synthetic page text for '+url),json:async()=>structuredClone(url==='archive-tree.json'?metadata:url==='archive-private-details.json'?privateData:archive)};
+  };
+  const context=vm.createContext({window,document,location,history,navigator:{},URL,URLSearchParams,fetch:fetcher,AbortController,setTimeout,clearTimeout,structuredClone,crypto:require('node:crypto').webcrypto});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-explorer.js'),'utf8'),context);
   vm.runInContext(script,context);
+  if(photoData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../photo-workspace.js'),'utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
-  return {nodes,navigation,handlers,location,events,go(hash){location.hash=hash;for(const fn of events.hashchange||[])fn();}};
+  return {nodes,navigation,handlers,location,events,window,photoSaved,photoRequests,go(hash){location.hash=hash;for(const fn of events.hashchange||[])fn();}};
 }
 test('header search works from an arbitrary app view and routes to results',async()=>{
   const {nodes,navigation}=await setup();nodes.get('globalSearch').value='Person Example';
@@ -171,4 +182,52 @@ test('original source deep links show the actual PDF and preserve page navigatio
  assert.equal(app.nodes.get('sourceViewer').hidden,false);assert.equal(app.nodes.get('sourcePdfFrame').attributes.src,'source-documents/demo.pdf#page=3');
  app.nodes.get('sourcePage').value='5';app.nodes.get('sourcePageGo').emit('click');assert.match(app.location.hash,/page=5/);
  app.nodes.get('closeSourceViewer').emit('click');assert.equal(app.nodes.get('sourcePdfFrame').attributes.src,undefined);
+});
+test('page previews have working previous/next bounds and preserve source links',async()=>{
+ const archive={...fixture,documents:[{id:'demo',title:'Synthetic report',url:'source-documents/demo.pdf',pages:3,pageImages:'source-pages/demo'}]};
+ const app=await setup(false,'#archive?document=demo&page=1',false,archive);
+ assert.equal(app.nodes.get('sourcePageImage').attributes.src,'source-pages/demo/1.jpg');
+ assert.equal(app.nodes.get('sourcePdfFrame').attributes.src,undefined);
+ assert.equal(app.nodes.get('sourcePrevious').disabled,true);
+ app.nodes.get('sourceNext').emit('click');assert.match(app.location.hash,/page=2/);
+ assert.equal(app.nodes.get('sourcePageImage').attributes.src,'source-pages/demo/2.jpg');
+ app.nodes.get('sourceNext').emit('click');assert.equal(app.nodes.get('sourceNext').disabled,true);
+ app.nodes.get('sourcePrevious').emit('click');assert.match(app.location.hash,/page=2/);
+ assert.equal(app.nodes.get('sourceOpenOriginal').attributes.href,'source-documents/demo.pdf#page=2');
+});
+const samplePhoto={id:'wall-example',kind:'wall',title:'Synthetic photograph',rect:[10,20,5,15],claims:[],evidence:[],notes:''};
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+function clickDataset(app,key,value){const target={dataset:{[key]:value},closest(selector){return selector==='[data-photo-id]'&&key==='photoId'||selector==='[data-propose-person]'&&key==='proposePerson'?this:null;}};for(const fn of app.handlers.click||[])fn({target,preventDefault(){}});}
+test('wall zoom, selection and draft notes save to the notebook API',async()=>{
+ const app=await setup(false,'#wall',false,fixture,null,null,{regions:[samplePhoto]});await tick();
+ assert.match(app.nodes.get('wallRegions').innerHTML,/wall-example/);
+ app.nodes.get('wallZoomIn').emit('click');assert.equal(app.nodes.get('wallCanvas').style.width,'125%');
+ app.nodes.get('wallFit').emit('click');assert.equal(app.nodes.get('wallCanvas').style.width,'100%');
+ clickDataset(app,'photoId','wall-example');assert.equal(app.nodes.get('photoResearchEditor').hidden,false);
+ assert.match(app.location.hash,/photo=wall-example/);
+ app.nodes.get('photoNotes').value='Inscription on reverse is transcribed.';app.nodes.get('photoNotes').emit('input');
+ app.nodes.get('savePhotoResearch').emit('click');await tick();
+ assert.equal(app.photoSaved.length,1);assert.equal(app.photoSaved[0].notes,'Inscription on reverse is transcribed.');
+ assert.match(app.nodes.get('photoSaveStatus').textContent,/Saved to your private notebook/);
+});
+test('failed notebook save preserves the draft and offers retry',async()=>{
+ const app=await setup(false,'#wall?photo=wall-example',false,fixture,null,null,{regions:[samplePhoto],saveFailure:true});await tick();
+ app.nodes.get('photoNotes').value='Keep this research.';app.nodes.get('photoNotes').emit('input');
+ app.nodes.get('savePhotoResearch').emit('click');await tick();
+ assert.match(app.nodes.get('photoSaveStatus').textContent,/Synthetic storage failure/);
+ assert.equal(app.nodes.get('photoNotes').value,'Keep this research.');assert.equal(app.nodes.get('savePhotoResearch').disabled,false);
+});
+test('written-record candidate becomes a proposed identity, never an automatic confirmation',async()=>{
+ const app=await setup(false,'#wall?photo=wall-example',false,fixture,null,null,{regions:[samplePhoto]});await tick();
+ clickDataset(app,'proposePerson','synthetic');
+ assert.match(app.nodes.get('photoClaims').innerHTML,/proposed/);
+ app.nodes.get('savePhotoResearch').emit('click');await tick();
+ assert.equal(app.photoSaved[0].claims[0].status,'proposed');assert.deepEqual(app.photoSaved[0].claims[0].evidenceIds,[]);
+});
+test('living switch removes known living identity research from notebook and unidentified gallery',async()=>{
+ const person={...fixture.profiles[0],restricted:true};
+ const saved={...samplePhoto,revision:2,notes:'Sensitive synthetic note',claims:[{id:'c1',profileId:'synthetic',label:'',status:'proposed',evidenceIds:[]}]};
+ const app=await setup(false,'#wall?photo=wall-example',false,{profiles:[person]},null,null,{regions:[samplePhoto],saved:[saved]});await tick();
+ assert.equal(app.nodes.get('photoNotes').value,'');assert.equal(app.nodes.get('savePhotoResearch').disabled,true);
+ assert.doesNotMatch(app.nodes.get('unknownPortraits').innerHTML,/Sensitive synthetic note/);
 });

@@ -11,7 +11,7 @@ a broken application. Existing pilot content and previously published assets rem
 unchanged; a code-only update does not remove them from Git history.
 
 Never push `archive-data.json`, `archive-tree.json`, `archive-private-details.json`,
-`assets/report-portraits/`, `source-documents/`, `extraction-audit.json`, `rebuild-checks.json`, `dist/`, source reports, screenshots of family data,
+`assets/report-portraits/`, `source-documents/`, `source-pages/`, `wall-catalog.json`, `extraction-audit.json`, `rebuild-checks.json`, `dist/`, source reports, screenshots of family data,
 deployment archives, credentials, or Python caches to public GitHub. The ignore rules
 are a safeguard, not a substitute for reviewing staged files.
 
@@ -57,10 +57,48 @@ tree, hive, list, gallery, and evidence panels. Switching off removes those deta
 and closes any original PDF currently displayed. Names and cited relationships remain
 navigable. This switch is a display preference, not an access-control boundary.
 
-Every report card and profile citation can open the **original PDF** at its cited page
-inside the archive, with page controls, download, and a new-tab fallback for browsers
-with limited embedded PDF support. Originals are unredacted, including when living
-profile details are hidden. Original PDF bytes are checked against their source hashes.
+Every report card and profile citation opens a readable **page preview** inside the
+archive. Previous/Next, direct page entry, page zoom and extracted text work without a
+PDF viewer. The original unmodified PDF remains available for opening or downloading.
+Page previews and originals are unredacted, including when living profile details are
+hidden. Original PDF bytes are checked against their source hashes.
+
+## Explore wall and photograph research
+
+The wall supports button/range zoom, touch pinch, drag to pan, keyboard navigation,
+and a fit-to-wall reset. Select a picture boundary or use the accessible picture list.
+Private `wall-catalog.json` defines normalized image regions, never facial identities.
+A curator can add or adjust boxes with two corner taps and numeric coordinates.
+No face recognition, face embeddings, biometric matching, or appearance-based identity
+inference is used.
+
+Each photograph has a durable private research notebook:
+
+- Find candidates by written name, recorded place/year, or family report. A candidate
+  is always proposed, never automatically confirmed. Source portraits support manual review.
+- Choose a person from the existing family tree, or record a possible name not in the
+  archive. Group photographs can have multiple linked people and competing proposals.
+- Attach report/page citations, external record URLs, caption transcriptions, and
+  attributed family recollections. While browsing any report page, use **Cite for selected
+  photograph** to prepare its exact citation.
+- Select supporting evidence before confirming an identity. Removing cited evidence or
+  changing the support selection reopens confirmation. Rejected proposals remain documented.
+- Save to the authenticated curator's D1 notebook; optimistic revisions reject stale
+  overwrites. Save failures retain the draft. Export backups or restore a backup as drafts
+  for review before saving. Unsaved drafts are only held in the current page.
+- Copy a saved picture's permanent `#wall?photo=stable-id` link. Site access is required.
+
+Known living-person notebook details follow the global switch. Original wall images,
+source pages, and unclassified research may contain living people; the switch remains
+only a presentation preference within the private Site.
+
+**Portraits from your reports** sorts by display name, surname, source, parent/family
+group, report-relative generation, or birth date. Source and text filters combine.
+Family groups use the existing cited relationship model and do not establish parentage.
+A person can appear in multiple groups. **Awaiting identification** separates unconfirmed
+wall and report photographs. On a report page, **Mark unidentified portrait** registers a
+crop for research without assigning a name. Boxes may need adjustment for tilted frames,
+collages, and group photographs; the original image is always preserved.
 
 `profile-presentation.js` uses rebuilt structured `birthDate`, `birthPlace`, and
 `deathDate` strings. For older archives it conservatively reads the named subject's report excerpt. It
@@ -108,7 +146,7 @@ Examples using synthetic identifiers only:
 - `#archive?view=hive&group=place` — place hive
 - `#archive?person=stable-id` — profile
 - `#archive?report=source-id&generation=3&focus=stable-id` — focused family branch
-- `#archive?document=source-id&page=9` — original PDF at the cited page
+- `#archive?document=source-id&page=9` — source page preview at the cited page
 
 The optional tree file has `memberships` containing `profileId`, `reportId`,
 `generation`, `page`, and `title`, and `edges` containing `parentId`, `childId`,
@@ -132,10 +170,11 @@ For source thumbnails, original-PDF links, and the living-details switch, add
 
 ```sh
 python3 scripts/build_source_media.py --source-dir /private/reports --archive-dir /private/candidate
+python3 scripts/render_source_pages.py --root /private/candidate
 ```
 
 Media extraction requires PyMuPDF. Promote the candidate's runtime JSON files,
-`assets/report-portraits/`, and `source-documents/` together to the private Site checkout.
+`assets/report-portraits/`, `source-documents/`, and `source-pages/` together to the private Site checkout.
 The public GitHub workflow rejects all of these private paths. The packager also rejects
 private media left behind in a code-only build and mismatched living-details snapshots.
 
@@ -160,7 +199,9 @@ it does not prove that the compiled reports themselves are historically correct.
 
 ## Run and test
 
-No browser runtime dependencies or paid services are required.
+The browser UI has no runtime package dependencies. The private Site adds a small
+Cloudflare Worker and D1 for durable photograph research. A simple static server or
+GitHub Pages serves the code-only UI but cannot save notebook records.
 
 ```sh
 python3 -m http.server 8080
@@ -171,6 +212,18 @@ Open `http://localhost:8080`. Camera preview needs HTTPS or localhost and user p
 To package the static files, run `node scripts/build-static.mjs`. The script copies the
 locally supplied archive only if present, so never publish a private `dist/` publicly.
 The GitHub Pages workflow tests the code and rejects a tracked private dataset.
+
+For private Sites, retain its registered project ID, remove `static` from
+`.openai/hosting.json`, and set `"d1": "DB"`. Run `npm ci`, `npm run db:generate` only
+when the schema changes, then `node scripts/build-site.mjs`. The output separates
+`dist/client` assets from `dist/server/index.js`. Generated Drizzle migrations live in
+`drizzle/` and are applied by Sites before Worker publication. Never rewrite an applied
+migration. The private archive and rendered pages must be supplied locally before building.
+
+Photo writes require the platform's authenticated user header, a same-origin JSON
+request, bounded data, valid archive references, and an expected revision. Each curator
+can read and write only their own notebook records. The Site remains owner-private;
+there is no public write endpoint or browser-storage substitute.
 
 ## Private archive format
 
@@ -208,13 +261,19 @@ the app shell; archive requests are network-only. Offline access to family recor
 therefore intentionally unavailable.
 
 The existing guide is a small deterministic pilot, not a general conversational AI.
-Archive intake, wall-registration editing, and backup import are still previews.
+Archive intake remains a preview. Photograph registration, notebook saving, and backup
+restoration are implemented. Camera mode remains a camera preview and does not recognize faces.
 Source labels point to the supplied reports and do not establish independent proof.
 
 ## Files
 
 - `search-engine.js`: data-independent indexing, matching, suggestions, and filters
-- `search-ui.js`: global combobox, archive results, inline profiles, gallery, and PDF controls
+- `search-ui.js`: global combobox, archive results, inline profiles, sorted gallery, and source-page controls
+- `photo-workspace.js`, `photo-workspace.css`: wall gestures, photo notebook, and unidentified gallery
+- `photo-research.js`: geometry, source/identity validation, and portrait grouping
+- `worker/index.mjs`, `db/schema.ts`, `drizzle/`: durable authenticated photo records
+- `scripts/render_source_pages.py`: full-report page previews and extracted text
+- `scripts/build-site.mjs`: private Worker and asset build
 - `archive-privacy.js`: reversible living-details display projection
 - `source-viewer.js`: constrained original-PDF URLs and page bounds
 - `report-edition.css`: restored report-portrait visual design

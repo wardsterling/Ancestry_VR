@@ -36,10 +36,10 @@
     $('#genericDialogContent').innerHTML = `<p class="eyebrow">Living Family Wall</p><h2>${title}</h2>${html}`;
     $('#genericDialog').showModal();
   }
-  $('#helpButton').addEventListener('click', () => openGeneric('How to use this MVP', '<ol><li>Search for a name or select a report portrait to focus its family tree.</li><li>Follow parents and children, or switch to hive and list views.</li><li>Use the living-person switch to show or hide available profile details.</li><li>Select a source citation to open the original PDF at that page.</li><li>The pilot family-history guide and Curator remain available.</li></ol><p>The collection stays in your private Site. Original PDFs are unredacted.</p>'));
+  $('#helpButton').addEventListener('click', () => openGeneric('How to use this MVP', '<ol><li>Search for a name or select a report portrait to focus its family tree.</li><li>Follow parents and children, or switch to hive and list views.</li><li>Use the living-person switch to show or hide available profile details.</li><li>Read source pages with Previous and Next, or open the original PDF.</li><li>Zoom the wall, tap a photograph and use the research notebook to link identities and supporting evidence.</li></ol><p>The collection stays in your private Site. Original PDFs are unredacted.</p>'));
   $('#modeInfo').addEventListener('click', () => openGeneric('Guide mode—not impersonation', '<p>The guide speaks <strong>about</strong> Howard using approved evidence. It does not claim to be Howard or to possess his memories.</p><p>A future first-person interpretation would require family approval and explicit reconstruction labels.</p>'));
   $('#addItem').addEventListener('click', () => openGeneric('Archive intake preview', '<p>The production workflow will capture an original, description, people, date, place, rights, privacy, evidence status, physical location, and unresolved questions.</p><button class="primary" onclick="this.closest(\'dialog\').close()">Got it</button>'));
-  $('#registerPhoto').addEventListener('click', () => openGeneric('Register a wall photograph', '<p>In the production workflow, draw a box around a frame, search for a person, and require a second confirmation before publishing the match.</p><p><strong>This prototype deliberately does not perform automatic face recognition.</strong></p>'));
+  $('#registerPhoto').addEventListener('click', () => { showView('wall'); window.PhotoWorkspace?.startWallDrawing(); });
   $('#searchPerson').addEventListener('click', () => { showView('archive'); $('#archiveSearch').focus(); });
   $('#genericDialog').addEventListener('click', e => { if (e.target.id === 'searchHoward') { $('#genericDialog').close(); showView('profile'); } });
   $('#viewTimeline').addEventListener('click', () => openGeneric('Howard’s documented timeline', '<div class="timeline"><p><b>1901</b> Born in Worcester, Massachusetts</p><p><b>1924</b> B.A., Howard University (reported)</p><p><b>1925</b> Married Marian Julia Hill (reported)</p><p><b>1930</b> M.D., Meharry Medical College (reported)</p><p><b>1978</b> Died in Springfield, Massachusetts</p></div>'));
@@ -68,12 +68,9 @@
     catch { notify('Camera permission was not granted. Wall photo mode still works.'); }
   });
 
-  $('#exportData').addEventListener('click', () => {
-    const payload = { app: 'The Living Family Wall', exportedAt: new Date().toISOString(), data: window.LFW_DATA, assignments: [{ personId: 'howard', xPercent: 57, yPercent: 42, status: 'needs-family-confirmation' }] };
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'})); a.download = 'living-family-wall-export.json'; a.click(); URL.revokeObjectURL(a.href); notify('Archive data exported.');
-  });
+  $('#exportData').addEventListener('click', () => window.PhotoWorkspace?.exportNotebook());
   $('#importData').addEventListener('click', () => $('#importFile').click());
-  $('#importFile').addEventListener('change', async e => { try { const j = JSON.parse(await e.target.files[0].text()); notify(j.app === 'The Living Family Wall' ? 'Valid backup read. Import preview complete.' : 'That file is not a Living Family Wall export.'); } catch { notify('The selected file is not valid JSON.'); } });
+  $('#importFile').addEventListener('change', e => window.PhotoWorkspace?.importNotebook(e.target.files[0]));
 
   window.LFW = { showView, notify };
 

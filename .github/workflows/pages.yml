@@ -23,7 +23,7 @@ jobs:
           node-version: '22'
       - name: Check code-only release
         run: |
-          if git ls-files | grep -Eq '(^|/)(archive-(data|tree|private-details)|extraction-audit|rebuild-checks)\.json$|^(dist|source-documents|assets/report-portraits)/|\.(tar\.gz|pdf|pyc)$'; then
+          if git ls-files | grep -Eq '(^|/)(archive-(data|tree|private-details)|extraction-audit|rebuild-checks|wall-catalog)\.json$|^(dist|source-documents|source-pages|assets/report-portraits)/|\.(tar\.gz|pdf|pyc)$'; then
             echo 'Private data or generated artifacts found in source. Publication stopped.'
             exit 1
           fi

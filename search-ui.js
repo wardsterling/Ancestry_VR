@@ -102,7 +102,7 @@
     renderResults();
     writeRoute();
   }
-  function sourceLink(source,label='Open original PDF') {
+  function sourceLink(source,label='Read source page') {
     const doc=window.SourceDocuments.source(documents,source.reportId,source.page);
     return doc?`<a href="${escape(doc.href)}" data-source-id="${escape(doc.id)}" data-source-page="${doc.page}">${escape(label)}</a>`:`<span>${escape(label)} · file unavailable</span>`;
   }
@@ -111,11 +111,17 @@
     document.querySelector('dialog[open]')?.close();
     window.LFW.showView('archive');route.document=doc.id;route.page=String(doc.page);
     $('#sourceViewer').hidden=false;$('#sourceViewerTitle').textContent=doc.title+' · page '+doc.page+' of '+doc.pages;
-    $('#sourcePdfFrame').setAttribute('src',doc.href);$('#sourceOpenOriginal').setAttribute('href',doc.href);
+    $('#sourcePdfFrame').hidden=!!doc.pageImage;
+    if(doc.pageImage){$('#sourcePdfFrame').removeAttribute('src');$('#sourcePageImage').setAttribute('src',doc.pageImage);$('#sourcePageImage').setAttribute('alt',doc.title+' — page '+doc.page);$('#sourcePageViewport').hidden=false;$('#sourcePageStatus').textContent='Loading page '+doc.page+'…';}else{$('#sourcePdfFrame').setAttribute('src',doc.href);$('#sourcePageViewport').hidden=true;$('#sourcePageStatus').textContent='Page previews are not yet connected for this report.';}
+    $('#sourcePrevious').disabled=doc.page<=1;$('#sourceNext').disabled=doc.page>=doc.pages;
+    $('#sourcePageText').hidden=!doc.pageText;$('#sourcePageTranscript').textContent='';
+    $('#markSourcePhoto').disabled=!doc.pageImage;window.PhotoWorkspace?.sourceChanged(doc);
+    $('#sourceOpenOriginal').setAttribute('href',doc.href);
     $('#sourceDownload').setAttribute('href',doc.url);$('#sourcePage').value=String(doc.page);$('#sourcePage').setAttribute('max',String(doc.pages));
+    if($('#sourcePageText').open)loadPageText();
     if(push){writeRoute(true);$('#sourceViewer').scrollIntoView?.({behavior:explorer.reduced()?'auto':'smooth',block:'start'});}
   }
-  function closeSource(push=true){$('#sourceViewer').hidden=true;$('#sourcePdfFrame').removeAttribute('src');if(push){route.document='';route.page='';writeRoute(true);}}
+  function closeSource(push=true){$('#sourceViewer').hidden=true;$('#sourcePdfFrame').removeAttribute('src');$('#sourcePageImage').removeAttribute('src');$('#sourcePageTranscript').textContent='';if(push){route.document='';route.page='';writeRoute(true);}}
   function openProfile(id,push=true) {
     const targets=Model.resolveId(id,profiles,idAliases);
     if(!targets.length){if(!loading)window.LFW.notify('This profile link is not in the connected archive.');return;}
@@ -136,15 +142,18 @@
     const portrait=d.portrait?`<img class="detail-portrait" src="${escape(d.portrait)}" alt="${escape(p.name)} — source portrait">`:'';
     const pilot=Object.values(window.LFW_DATA?.people||{}).find(x=>x.archiveId===id);
     $('#profileDialogContent').innerHTML=`<header class="inline-profile-heading">${portrait}<div><p class="eyebrow">Selected in family tree</p><h2>${escape(p.name)}</h2><p>${escape(dates(p))}</p></div></header>${explorer.vitals(p)}<div class="profile-link-tools"><button id="copyProfileLink" class="secondary small">Copy profile link</button>${pilot&&pilot.archiveId===window.LFW_DATA?.people?.howard?.archiveId?'<a class="secondary small" href="#conversation">Family-history guide</a>':''}</div>${p.reviewStatus?'<p class="source-note">Legacy entry awaiting a source match. Previous facts have been withheld.</p>':''}${(p.reviewNotes||[]).map(note=>`<p class="source-note">${escape(note)}</p>`).join('')}${p.identityReview?'<p class="source-note">Other records share this name and remain separate pending review.</p>':''}<section><h3>Original source pages</h3><ul class="profile-sources">${[...new Map(p.sources.map(s=>[s.reportId+'|'+s.page,s])).values()].map(s=>`<li>${sourceLink(s,s.title+' · page '+s.page)}</li>`).join('')}</ul>${p.portrait?.source?`<p>${sourceLink(p.portrait.source,'View this photograph in its original report')}</p>`:''}</section><details class="profile-narrative"><summary>Read extracted evidence</summary>${evidence}</details><details><summary>Connections across all reports (${related.length})</summary><div class="tree-relatives">${related.map(r=>`<div><a data-profile-id="${escape(r.person.id)}" href="${escape(href({person:r.person.id}))}">${escape(r.label)}: ${escape(r.person.name)}</a><small>${sourceLink(r.edge,(family.reports.find(x=>x.id===r.edge.reportId)?.title||r.edge.reportId)+' · p. '+r.edge.page)}</small></div>`).join('')}</div></details><p class="search-help">A family-group listing does not establish parentage. Report claims still need source review.</p>`;
-    $('#profileDetails').hidden=false;
+    $('#profileDetails').hidden=false;window.PhotoWorkspace?.profileChanged(p);
     $('#copyProfileLink').addEventListener('click',()=>copyLink(Model.link({person:id})));
     if(push){writeRoute(true);$('#familyConnections').scrollIntoView?.({behavior:explorer.reduced()?'auto':'smooth',block:'start'});}
   }
   function renderGallery(){
-    const photos=profiles.filter(p=>window.ProfilePresentation.describe(p,window.LFW_DATA?.people||{}).portrait);
-    $('#portraitSummary').textContent=photos.length+' available portraits · select a person to open their tree';
-    $('#portraitGallery').innerHTML=photos.slice(0,portraitLimit).map(p=>`<article class="report-portrait-card"><a data-profile-id="${escape(p.id)}" href="${escape(Model.link({focus:p.id,person:p.id}))}">${explorer.portrait(p)}<strong>${escape(p.name)}</strong></a><small>${p.portrait?.source?sourceLink(p.portrait.source,'Report · page '+p.portrait.source.page):'Pilot portrait'}</small></article>`).join('');
-    $('#morePortraits').hidden=photos.length<=portraitLimit;
+    const choices={sort:$('#portraitSort').value||'name',source:$('#portraitSource').value,query:$('#portraitQuery').value};
+    const photos=profiles.map(p=>({...p,portrait:p.portrait||{src:window.ProfilePresentation.describe(p,window.LFW_DATA?.people||{}).portrait}}));
+    const groups=window.PhotoResearch.groupPortraits(photos,choices,explorer.family),total=groups.reduce((n,g)=>n+g.people.length,0),unique=new Set(groups.flatMap(g=>g.people.map(p=>p.id))).size;
+    $('#portraitSummary').textContent=unique+' matching portraits · select a person to open their tree'+(total>unique?' · some people appear in multiple family groups':'');
+    let left=portraitLimit;
+    $('#portraitGallery').innerHTML=groups.map(g=>{const people=g.people.slice(0,left);left-=people.length;if(!people.length)return '';return (groups.length>1?`<h3 class="portrait-group-heading">${escape(g.label)}</h3>`:'')+people.map(p=>`<article class="report-portrait-card"><a data-profile-id="${escape(p.id)}" href="${escape(Model.link({focus:p.id,person:p.id}))}">${explorer.portrait(p)}<strong>${escape(p.name)}</strong></a><small>${p.portrait?.source?sourceLink(p.portrait.source,'Report · page '+p.portrait.source.page):'Pilot portrait'}</small></article>`).join('');}).join('')||'<p>No portraits match these filters. Living-person portraits follow the switch above.</p>';
+    $('#morePortraits').hidden=total<=portraitLimit;
   }
   function applyDisplay(){
     profiles=window.ArchivePrivacy.project(rawProfiles,showLiving,privateDetails);
@@ -154,9 +163,10 @@
     $('#restrictedMetric').textContent=rawProfiles.filter(p=>p.restricted).length.toLocaleString();
     $('#sourceFilter').innerHTML='<option value="">All reports</option>'+facets.sources.map(s=>`<option value="${escape(s.id)}">${escape(s.title)}</option>`).join('');$('#sourceFilter').value=selected;
     $('#placeOptions').innerHTML=facets.places.map(p=>`<option value="${escape(p)}"></option>`).join('');
-    $('#reportLibrary').innerHTML=documents.map((d,i)=>`<article class="report-tile"><a href="${escape(Model.link({report:d.id}))}"><small>0${i+1} / DESCENDANT REPORT</small><strong>${escape(d.title.replace(/^Descendants of /,''))}</strong></a>${sourceLink({reportId:d.id,page:1},d.pages+' pages · Open PDF')}</article>`).join('');
+    $('#reportLibrary').innerHTML=documents.map((d,i)=>`<article class="report-tile"><a href="${escape(Model.link({report:d.id}))}"><small>0${i+1} / DESCENDANT REPORT</small><strong>${escape(d.title.replace(/^Descendants of /,''))}</strong></a>${sourceLink({reportId:d.id,page:1},d.pages+' pages · Read pages')}</article>`).join('');
     $('#pilotOriginalSource').hidden=!documents.some(d=>d.id==='brimage-gatling');
-    renderGallery();
+    const gallerySource=$('#portraitSource').value;$('#portraitSource').innerHTML='<option value="">All reports</option>'+facets.sources.map(s=>`<option value="${escape(s.id)}">${escape(s.title)}</option>`).join('');$('#portraitSource').value=gallerySource;
+    renderGallery();window.PhotoWorkspace?.archiveChanged();
   }
   async function toggleLiving(){
     const revision=++toggleRevision,wanted=$('#showLiving').checked;
@@ -239,9 +249,18 @@
   $('#copyArchiveLink').addEventListener('click',()=>{writeRoute();copyLink(href({person:''}));});
   $('#closeProfileDetails').addEventListener('click',()=>{$('#profileDetails').hidden=true;route.person='';writeRoute(true);});
   $('#showLiving').addEventListener('change',toggleLiving);
+  ['portraitSort','portraitSource','portraitQuery'].forEach(id=>$('#'+id).addEventListener(id==='portraitQuery'?'input':'change',()=>{portraitLimit=24;renderGallery();}));
   $('#morePortraits').addEventListener('click',()=>{portraitLimit+=24;renderGallery();});
   $('#closeSourceViewer').addEventListener('click',()=>closeSource());
   $('#sourcePageGo').addEventListener('click',()=>openSource(route.document,$('#sourcePage').value));
+  $('#sourcePrevious').addEventListener('click',()=>openSource(route.document,Number(route.page)-1));
+  $('#sourceNext').addEventListener('click',()=>openSource(route.document,Number(route.page)+1));
+  $('#sourceZoom').addEventListener('change',()=>{$('#sourcePageCanvas').style.width=$('#sourceZoom').value+'%';});
+  $('#sourcePageImage').addEventListener('load',()=>{$('#sourcePageStatus').textContent='Page '+route.page+' of '+(documents.find(d=>d.id===route.document)?.pages||'');});
+  $('#sourcePageImage').addEventListener('error',()=>{$('#sourcePageStatus').textContent='This page could not load. Try another page, or open the original PDF below.';});
+  async function loadPageText(){const doc=window.SourceDocuments.source(documents,route.document,route.page);if(!doc?.pageText)return;const key=doc.pageText;$('#sourcePageTranscript').textContent='Loading text…';try{const response=await fetch(key,{cache:'no-store'});if(!response.ok)throw Error();const text=await response.text();if(window.SourceDocuments.source(documents,route.document,route.page)?.pageText===key&&!$('#sourceViewer').hidden)$('#sourcePageTranscript').textContent=text||'No text was extracted from this page.';}catch{if(window.SourceDocuments.source(documents,route.document,route.page)?.pageText===key)$('#sourcePageTranscript').textContent='Page text is unavailable. Read the image above or open the original PDF.';}}
+  $('#sourcePageText').addEventListener('toggle',()=>{if($('#sourcePageText').open)loadPageText();});
+  window.ArchiveApp={get profiles(){return profiles;},get family(){return explorer.family;},get documents(){return documents;},get showLiving(){return showLiving;},get selectedProfile(){return profiles.find(p=>p.id===route.person);},get currentSource(){return window.SourceDocuments.source(documents,route.document,route.page);},search(query,source=''){return index?index.search(query,{source,fuzzy:true}).slice(0,30).map(x=>x.profile):[];},openProfile,openSource};
   window.addEventListener('hashchange',restoreRoute);
   window.addEventListener('popstate',restoreRoute);
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.search-widget'))closePanels();});
