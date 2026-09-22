@@ -13,7 +13,8 @@
   async function processItem(item){
     progress(item.id,'Preparing source report…');
     state=await json('/api/archive-imports');
-    const [archive,tree,privateDetails,sourcePeople,base,extra]=await Promise.all(['archive-data.json','archive-tree.json','archive-private-details.json','source-people.json','import-base.json','/api/archive-imports/inputs'].map(url=>json(url)));
+    const [archive,tree,privateDetails,sourcePeople,base,extra]=await Promise.all(['/api/archive/archive','/api/archive/tree','/api/archive/privateDetails','/api/archive/sourcePeople','import-base.json','/api/archive/inputs'].map(url=>json(url)));
+    if([tree,privateDetails,sourcePeople].some(part=>part.snapshotId!==archive.snapshotId)||extra.revision!==state.revision)throw Error('The archive changed. Reload and retry this report.');
     const response=await fetch('/api/archive-items/'+item.id+'/file',{cache:'no-store'});if(!response.ok)throw Error('The original PDF could not load. Retry this saved item.');
     const bytes=new Uint8Array(await response.arrayBuffer()),sha256=await hash(bytes);
     const existing=archive.documents.find(d=>d.sha256===sha256);if(existing){progress(item.id,'Already in the archive · '+existing.title);return;}

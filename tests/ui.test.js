@@ -15,7 +15,7 @@ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=fs.readFileSync(path.join(__dirname,'../search-ui.js'),'utf8');
 const fixture={profiles:[{id:'synthetic',name:'Example Test Person',aliases:['Tester'],birthYear:1800,deathYear:1870,
   years:['1800','1870'],places:['Demo City, VA'],facts:['Synthetic statement only.'],sources:[{reportId:'demo',title:'Synthetic report',page:1}],restricted:false}]};
-async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null,itemData=null) {
+async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null,itemData=null,insightData=null) {
   const nodes=new Map(), scopes=[];
   class Element {
     constructor(id,tag='DIV'){this.id=id;this.tagName=tag;this.value='';this.checked=false;this.hidden=false;this.open=false;this.textContent='';this.dataset={};this.attributes={};this.handlers={};this.options=[];this.selectedIndex=0;this.classList={toggle(){}};this.style={setProperty(){}};this.classList={toggle(){},add(){},remove(){}};this.scrollLeft=0;this.scrollTop=0;this.clientWidth=1000;this.clientHeight=400;nodes.set(id,this);}
@@ -40,7 +40,7 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   nodes.get('fuzzySearch').checked=true;nodes.get('resultSort').value='relevance';
   nodes.get('statusFilter').options=[{text:'All profiles'}];
   const handlers={};
-  const document={activeElement:null,
+  const document={activeElement:null,getElementById(id){return nodes.get(id)||null;},
     querySelector(selector){if(selector==='dialog[open]')return [...nodes.values()].find(n=>n.tagName==='DIALOG'&&n.open)||null;if(selector.startsWith('#'))return nodes.get(selector.slice(1))||null;return null;},
     querySelectorAll(selector){return selector==='[data-scope]'?scopes:[];},
     addEventListener(type,fn){(handlers[type]||=[]).push(fn);}};
@@ -48,10 +48,12 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   const location={hash,href:'https://example.test/'+hash};
   const history={pushState(a,b,url){location.hash=url;location.href='https://example.test/'+url;},replaceState(a,b,url){this.pushState(a,b,url);}};
   const events={};
-  const window={PhotoResearch,ArchiveItemRules,innerWidth:1400,confirm:()=>true,FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
+  const window={SourceAttributes:require('../source-attributes'),PersonStatistics:require('../person-statistics'),PhotoResearch,ArchiveItemRules,innerWidth:1400,confirm:()=>true,FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
   const metadata=treeData||{snapshotId:archive.snapshotId,memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
   const photoSaved=[],photoRequests=[],itemSaved=[];
   const fetcher=async (url,options={})=>{
+    if(url==='/api/archive/inputs')return {ok:!insightData?.failure,json:async()=>({snapshotId:archive.snapshotId,inputs:insightData?.inputs||{}})};
+    if(url.startsWith('/api/archive/'))url=({'/api/archive/archive':'archive-data.json','/api/archive/tree':'archive-tree.json','/api/archive/privateDetails':'archive-private-details.json','/api/archive/sourcePeople':'source-people.json'})[url.split('?')[0]]||url;
     if(url.startsWith('/api/archive-items')){if(options.method==='PUT'){if(itemData?.saveFailure)return {ok:false,json:async()=>({error:'Synthetic item storage failure'})};const item={...JSON.parse(options.body.get('metadata')),revision:1,updatedAt:'2026-01-01T00:00:00Z',createdAt:'2026-01-01T00:00:00Z'};itemSaved.push(item);return {ok:true,json:async()=>({item})};}return {ok:true,json:async()=>({items:itemData?.saved||[]})};}
     if(url==='wall-catalog.json')return {ok:true,json:async()=>({regions:photoData?.regions||[]})};
     if(url==='source-people.json')return {ok:!!photoData?.sourcePeople,json:async()=>photoData?.sourcePeople};
@@ -62,6 +64,7 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-explorer.js'),'utf8'),context);
   vm.runInContext(script,context);
   if(photoData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../photo-workspace.js'),'utf8'),context);
+  if(insightData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../person-insights.js'),'utf8'),context);
   if(itemData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-intake.js'),'utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
   return {nodes,navigation,handlers,location,events,window,photoSaved,photoRequests,itemSaved,go(hash){location.hash=hash;for(const fn of events.hashchange||[])fn();}};
@@ -312,4 +315,25 @@ test('saved PDFs update source collections and the family-report library before 
  assert.match(app.nodes.get('sourceCollectionList').innerHTML,/New family sources/);
  assert.match(app.nodes.get('reportLibrary').innerHTML,/Synthetic new report/);
  assert.match(app.nodes.get('reportLibrary').innerHTML,/data-archive-item="item-new-source"/);
+});
+test('archive metrics follow incorporated reports and tree labels separate report and generation counts',async()=>{
+ const archive=structuredClone(fixture);archive.documents=Array.from({length:5},(_,i)=>({id:'report-'+i,title:'Synthetic report '+i,pages:1}));
+ const {nodes}=await setup(false,'#archive',false,archive);
+ assert.equal(nodes.get('reportMetric').textContent,'5');assert.equal(nodes.get('profileMetric').textContent,'1');
+ assert.match(nodes.get('resultSummary').textContent,/matches in selected report/);assert.match(nodes.get('resultSummary').textContent,/foreground generation/);assert.doesNotMatch(nodes.get('resultSummary').textContent,/across all reports/);
+});
+test('people insights restores layered filters, links evidence and clears hidden detail filters',async()=>{
+ const archive={...structuredClone(fixture),snapshotId:'synthetic-snapshot',documents:[{id:'demo',title:'Synthetic report',pages:1}],livingDetailsAvailable:true};
+ archive.profiles[0].birthPlace='Demo City, VA';archive.sourceIdMap={'demo:person:1':'synthetic'};
+ const insights={inputs:{demo:{text:'1. Example Test Person was born in 1800. He was educated in 1820 in B.A., Example University.'}}};
+ const result=await setup(false,'#insights?by=education&state=Virginia',false,archive,null,null,null,null,insights);
+ await new Promise(resolve=>setImmediate(resolve));const {nodes,go}=result;
+ assert.match(nodes.get('insightTotals').innerHTML,/Grand total/);assert.match(nodes.get('insightPeopleTitle').textContent,/1 people/);assert.match(nodes.get('insightBars').innerHTML,/Bachelor/);assert.match(nodes.get('insightPeople').innerHTML,/data-source-id="demo"/);
+ go('#insights?by=state&state=Massachusetts');assert.match(nodes.get('insightPeopleTitle').textContent,/0 people/);
+ nodes.get('insightReset').emit('click');assert.match(nodes.get('insightPeopleTitle').textContent,/1 people/);
+});
+test('unavailable statement inputs show unavailable counts rather than fabricated zeros',async()=>{
+ const result=await setup(false,'#insights?by=education&education=Bachelor',false,{...fixture,snapshotId:'synthetic'},null,null,null,null,{failure:true});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.match(result.nodes.get('insightStatus').textContent,/unavailable/);assert.match(result.nodes.get('insightPeopleTitle').textContent,/—/);assert.equal(result.nodes.get('insightRetry').hidden,false);
 });

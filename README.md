@@ -374,3 +374,33 @@ Source labels point to the supplied reports and do not establish independent pro
 
 Family collection material retains its existing rights. Confirm permission before
 publishing additional records or media.
+
+## People insights and live archive totals
+
+`#insights` shows unique people, distinct cited family groups, incorporated reports,
+and the current selection. Combine filters, compare two dimensions, select a bar or
+intersection, and open the people and source pages behind it. View URLs preserve the
+filters. Birth/death state, source-relative generation, birth decade, portraits,
+explicit sex/gender, education, health/cause of death, occupation, military service,
+and residence statements are available. Multi-valued categories overlap; percentages
+use unique people in the selection. A family group is a distinct cited parent set
+with children, not a surname or an assumed household. Partial and complete parent
+sets remain separate; family-listing links do not establish parentage.
+
+`source-attributes.js` extracts attributed statements from the same source layout text
+used for imports. It requires a source-scoped numbered identity or an unambiguous
+cited name/page, stops at another person's biography, and retains page citations.
+It does not infer gender from names or pronouns, or infer health diagnoses. Unextracted
+values, conflicting records, and hidden details have distinct categories. This is
+conservative extraction, not complete transcription or independent verification.
+
+Browser data reads now use `/api/archive/{archive,tree,privateDetails,sourcePeople,inputs}`.
+The Worker reads the owner's current committed snapshot instead of allowing static
+asset routing to serve the original report set. Related parts validate snapshot IDs;
+missing saved objects and missing authentication never silently fall back to the
+original archive. Only owners without a saved snapshot receive the original baseline.
+The platform-provided stable user ID remains required; an email alone cannot select
+an owner's saved records. A missing session shows a top-level sign-in link.
+Archive metrics use current records and documents, while the tree labels report
+matches and foreground-generation counts separately. New imports appear in these
+views after the shared archive reload without changing any report-count constants.

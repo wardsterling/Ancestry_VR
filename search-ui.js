@@ -85,13 +85,13 @@
       `<a href="${escape(href({person:p.id}))}" class="archive-profile card" data-profile-id="${escape(p.id)}">${explorer.portrait(p)}<span class="profile-card-copy"><strong>${escape(p.name)}</strong><small>${escape(dates(p))}</small><em>${p.restricted?'Restricted pending family review':escape(p.places.slice(0,2).join(' · ')||'Open report evidence')}</em></span><span class="source-count">${p.sources.length} source location${p.sources.length===1?'':'s'}${approximate?' · Similar spelling':''}</span></a>`
     ).join('');
     if (!ordered.length) {
-      $('#archiveResults').innerHTML=`<div class="empty-result card"><h2>${loading?'Loading archive…':loadError?'Archive not connected':'No matching profiles'}</h2><p>${escape(loading?'Please wait a moment.':loadError||'Try fewer words, allow minor spelling errors, or remove a filter.')}</p>${loadError?'<button id="retryArchive" class="secondary">Try loading again</button>':''}</div>`;
+      $('#archiveResults').innerHTML=`<div class="empty-result card"><h2>${loading?'Loading archive…':loadError?'Archive not connected':'No matching profiles'}</h2><p>${escape(loading?'Please wait a moment.':loadError||'Try fewer words, allow minor spelling errors, or remove a filter.')}</p>${loadError?'<button id="retryArchive" class="secondary">Try loading again</button> <a class="secondary" href="/signin-with-chatgpt?return_to=%2F" target="_top">Sign in again</a>':''}</div>`;
     }
     const shown=Math.min(limit,ordered.length);
     $('#loadMore').hidden=!!visual||shown>=ordered.length;
     $('#loadMore').textContent=`Show more (${Math.max(0,ordered.length-shown)} remaining)`;
     const approx=ordered.filter(r=>r.approximate).length;
-    $('#resultSummary').textContent=loading?'Loading the family archive…':loadError?'No family records are included in this code-only copy.':`${ordered.length.toLocaleString()} matching profiles · ${visual?visual.label:'showing '+shown.toLocaleString()}${approx?` · ${approx} similar-spelling matches`:''}`;
+    $('#resultSummary').textContent=loading?'Loading the family archive…':loadError?loadError:`${ordered.length.toLocaleString()} matching profiles · ${visual?visual.label:'showing '+shown.toLocaleString()}${approx?` · ${approx} similar-spelling matches`:''}`;
   }
   function runSearch() {
     limit=36; chips();
@@ -165,20 +165,20 @@
     profiles=window.ArchivePrivacy.project(rawProfiles,showLiving,privateDetails);
     index=new engine.Index(profiles);explorer.setData(profiles,treeData);
     const facets=index.facets(),selected=$('#sourceFilter').value;
-    $('#profileMetric').textContent=profiles.length.toLocaleString();$('#placeMetric').textContent=facets.places.length.toLocaleString();
+    $('#profileMetric').textContent=new Set(profiles.map(p=>p.id)).size.toLocaleString();$('#reportMetric').textContent=documents.length.toLocaleString();$('#placeMetric').textContent=facets.places.length.toLocaleString();
     $('#restrictedMetric').textContent=rawProfiles.filter(p=>p.restricted).length.toLocaleString();
     $('#sourceFilter').innerHTML='<option value="">All reports</option>'+facets.sources.map(s=>`<option value="${escape(s.id)}">${escape(s.title)}</option>`).join('');$('#sourceFilter').value=selected;
     $('#placeOptions').innerHTML=facets.places.map(p=>`<option value="${escape(p)}"></option>`).join('');
     renderSourceLists();
     $('#pilotOriginalSource').hidden=!documents.some(d=>d.id==='brimage-gatling');
     const gallerySource=$('#portraitSource').value;$('#portraitSource').innerHTML='<option value="">All reports</option>'+facets.sources.map(s=>`<option value="${escape(s.id)}">${escape(s.title)}</option>`).join('');$('#portraitSource').value=gallerySource;
-    renderGallery();window.PhotoWorkspace?.archiveChanged();window.ArchiveItems?.archiveChanged();
+    renderGallery();window.PersonInsights?.refresh();window.PhotoWorkspace?.archiveChanged();window.ArchiveItems?.archiveChanged();
   }
   async function toggleLiving(){
     const revision=++toggleRevision,wanted=$('#showLiving').checked;
     if(!wanted){showLiving=false;closeSource();applyDisplay();runSearch();if(route.person)openProfile(route.person,false);return;}
     try{
-      if(!privateReady){const response=await fetch('archive-private-details.json',{cache:'no-store'});if(!response.ok)throw Error('unavailable');const data=await response.json();if(data.snapshotId!==sourceArchive.snapshotId)throw Error('mismatch');privateDetails=data.profiles||{};privateReady=true;}
+      if(!privateReady){const response=await fetch('/api/archive/privateDetails?snapshot='+encodeURIComponent(sourceArchive.snapshotId||''),{cache:'no-store'});if(!response.ok)throw Error('unavailable');const data=await response.json();if(data.snapshotId!==sourceArchive.snapshotId)throw Error('mismatch');privateDetails=data.profiles||{};privateReady=true;}
       if(revision!==toggleRevision)return;
       showLiving=true;applyDisplay();runSearch();if(route.person)openProfile(route.person,false);
     }catch{if(revision!==toggleRevision)return;$('#showLiving').checked=false;showLiving=false;window.LFW.notify('Living-person details could not be loaded. They remain hidden.');}
@@ -267,7 +267,7 @@
   $('#sourcePageImage').addEventListener('error',()=>{$('#sourcePageStatus').textContent='This page could not load. Try another page, or open the original PDF below.';});
   async function loadPageText(){const doc=window.SourceDocuments.source(documents,route.document,route.page);if(!doc?.pageText)return;const key=doc.pageText;$('#sourcePageTranscript').textContent='Loading text…';try{const response=await fetch(key,{cache:'no-store'});if(!response.ok)throw Error();const text=await response.text();if(window.SourceDocuments.source(documents,route.document,route.page)?.pageText===key&&!$('#sourceViewer').hidden)$('#sourcePageTranscript').textContent=text||'No text was extracted from this page.';}catch{if(window.SourceDocuments.source(documents,route.document,route.page)?.pageText===key)$('#sourcePageTranscript').textContent='Page text is unavailable. Read the image above or open the original PDF.';}}
   $('#sourcePageText').addEventListener('toggle',()=>{if($('#sourcePageText').open)loadPageText();});
-  window.ArchiveApp={get ready(){return !loading&&!loadError&&!!index;},get unidentifiedPortraits(){return sourceArchive.unidentifiedPortraits||[];},reload:loadArchive,refreshSources:renderSourceLists,get profiles(){return profiles;},get snapshotId(){return sourceArchive?.snapshotId;},get profileAliases(){return idAliases;},get family(){return explorer.family;},get documents(){return documents;},get showLiving(){return showLiving;},get selectedProfile(){return profiles.find(p=>p.id===route.person);},get currentSource(){return window.SourceDocuments.source(documents,route.document,route.page);},setItemRoute(id){route.item=id;route.items=id?'':'1';route.person='';route.document='';closeSource(false);window.LFW.showView('archive',false);renderResults();writeRoute(true);},search(query,source=''){return index?index.search(query,{source,fuzzy:true}).slice(0,30).map(x=>x.profile):[];},openProfile,openSource};
+  window.ArchiveApp={get ready(){return !loading&&!loadError&&!!index;},get archive(){return sourceArchive;},get tree(){return treeData;},get error(){return loadError;},get unidentifiedPortraits(){return sourceArchive.unidentifiedPortraits||[];},reload:loadArchive,refreshSources:renderSourceLists,get profiles(){return profiles;},get snapshotId(){return sourceArchive?.snapshotId;},get profileAliases(){return idAliases;},get family(){return explorer.family;},get documents(){return documents;},get showLiving(){return showLiving;},get selectedProfile(){return profiles.find(p=>p.id===route.person);},get currentSource(){return window.SourceDocuments.source(documents,route.document,route.page);},setItemRoute(id){route.item=id;route.items=id?'':'1';route.person='';route.document='';closeSource(false);window.LFW.showView('archive',false);renderResults();writeRoute(true);},search(query,source=''){return index?index.search(query,{source,fuzzy:true}).slice(0,30).map(x=>x.profile):[];},openProfile,openSource};
   window.addEventListener('hashchange',restoreRoute);
   window.addEventListener('popstate',restoreRoute);
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.search-widget'))closePanels();});
@@ -280,8 +280,8 @@
     if(!loading){loading=true;loadError='';runSearch();}
     const abort=new AbortController(), timer=setTimeout(()=>abort.abort(),10000);
     try {
-      const response=await fetch('archive-data.json',{cache:'no-store',signal:abort.signal});
-      if(!response.ok)throw Error(response.status===404?'missing':'unavailable');
+      const response=await fetch('/api/archive/archive',{cache:'no-store',signal:abort.signal});
+      if(!response.ok)throw Error(response.status===401?'signin':response.status===404?'missing':'unavailable');
       const data=await response.json();
       if(!Array.isArray(data.profiles))throw Error('invalid');
       idAliases=data.idAliases||{};
@@ -291,18 +291,18 @@
         facts:Array.isArray(p.facts)?p.facts:[],years:Array.isArray(p.years)?p.years:[],
         sources:Array.isArray(p.sources)?p.sources.filter(s=>s&&typeof s.title==='string'&&typeof s.reportId==='string'):[]}));
       let tree=null;
-      try{const response=await fetch('archive-tree.json',{cache:'no-store',signal:abort.signal});if(response.ok)tree=await response.json();}catch{}
+      try{const response=await fetch('/api/archive/tree?snapshot='+encodeURIComponent(data.snapshotId||''),{cache:'no-store',signal:abort.signal});if(response.ok)tree=await response.json();}catch{}
       if(data.snapshotId&&tree?.snapshotId!==data.snapshotId)throw Error('snapshot-mismatch');
-      treeData=tree;privateReady=false;privateDetails={};if(showLiving){const response=await fetch('archive-private-details.json',{cache:'no-store'});if(!response.ok)throw Error('private-unavailable');const details=await response.json();if(details.snapshotId!==data.snapshotId)throw Error('snapshot-mismatch');privateDetails=details.profiles||{};privateReady=true;}applyDisplay();$('#showLiving').disabled=!data.livingDetailsAvailable;
+      treeData=tree;privateReady=false;privateDetails={};if(showLiving){const response=await fetch('/api/archive/privateDetails?snapshot='+encodeURIComponent(sourceArchive.snapshotId||''),{cache:'no-store'});if(!response.ok)throw Error('private-unavailable');const details=await response.json();if(details.snapshotId!==data.snapshotId)throw Error('snapshot-mismatch');privateDetails=details.profiles||{};privateReady=true;}applyDisplay();$('#showLiving').disabled=!data.livingDetailsAvailable;
       $('#archiveValidation').hidden=!data.validation;
-      if(data.validation)$('#archiveValidation').textContent=`Rebuilt from ${data.validation.reports} reports · ${data.validation.citedRelationships.toLocaleString()} cited relationships · ${data.validation.reviewItems||0} extraction items awaiting review · ${data.validation.identityReviewCount||0} profiles need same-name review. Report claims are not independent verification.`;
+      if(data.validation)$('#archiveValidation').textContent=`Rebuilt from ${documents.length} reports · ${new Set((treeData?.edges||[]).map(e=>e.parentId+'|'+e.childId)).size.toLocaleString()} unique family links · ${(treeData?.edges||[]).length.toLocaleString()} report-cited links · ${data.validation.reviewItems||0} extraction items awaiting review · ${data.validation.identityReviewCount||0} profiles need same-name review. Report claims are not independent verification.`;
       loadError='';
     } catch(error) {
-      index=null;profiles=[];rawProfiles=[];$('#showLiving').disabled=true;$('#portraitSummary').textContent='Connect the private archive to see source portraits.';
-      loadError=error.message==='missing'?'The public code does not include family data. The full archive is available only in the private Sites preview.':'The archive could not be loaded. Check your connection, then try again.';
-      ['profileMetric','placeMetric','restrictedMetric'].forEach(id=>$('#'+id).textContent='—');
+      index=null;profiles=[];rawProfiles=[];documents=[];sourceArchive={};treeData=null;privateDetails={};privateReady=false;$('#reportLibrary').innerHTML='';$('#archiveValidation').hidden=true;$('#showLiving').disabled=true;$('#portraitSummary').textContent='Connect the private archive to see source portraits.';
+      loadError=error.message==='signin'?'Sign in again to load the current saved archive.':error.message==='missing'?'The public code does not include family data. The full archive is available only in the private Sites preview.':'The archive could not be loaded. Check your connection, then try again.';
+      ['profileMetric','placeMetric','reportMetric','restrictedMetric'].forEach(id=>$('#'+id).textContent='—');
     } finally {
-      clearTimeout(timer);loading=false;window.ArchiveImport?.queue();if(location.hash.startsWith('#archive'))restoreRoute();else runSearch();controllers.filter(c=>document.activeElement===c.input).forEach(c=>c.refresh());
+      clearTimeout(timer);loading=false;window.PersonInsights?.refresh();window.ArchiveImport?.queue();if(location.hash.startsWith('#archive'))restoreRoute();else runSearch();controllers.filter(c=>document.activeElement===c.input).forEach(c=>c.refresh());
     }
   }
   setScope('all');loadArchive();

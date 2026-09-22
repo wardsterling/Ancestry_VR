@@ -8,12 +8,33 @@ export async function archiveState(env,owner){
   return row?{...JSON.parse(row.body),revision:row.revision}:null;
 }
 export async function archiveCatalog(env,owner,base){const state=await archiveState(env,owner);return state?.catalog||base;}
+// Browser reads use /api/archive so deployed static assets cannot bypass live state.
 export async function archivePart(request,env){
-  const owner=request.headers.get('oai-authenticated-user-id');if(!owner)return null;
-  const part={'/archive-data.json':'archive','/archive-tree.json':'tree','/archive-private-details.json':'privateDetails','/source-people.json':'sourcePeople'}[new URL(request.url).pathname];
-  if(!part)return null;const state=await archiveState(env,owner);if(!state)return null;
-  const object=await env.ARCHIVE_FILES.get(state.parts[part]);if(!object)return importJson({error:'The saved archive could not load. Please retry.'},503);
-  return new Response(object.body,{headers:{'content-type':'application/json','cache-control':'private, no-store','x-content-type-options':'nosniff'}});
+  const url=new URL(request.url),legacy={'/archive-data.json':'archive','/archive-tree.json':'tree','/archive-private-details.json':'privateDetails','/source-people.json':'sourcePeople'};
+  const files={archive:'archive-data.json',tree:'archive-tree.json',privateDetails:'archive-private-details.json',sourcePeople:'source-people.json',inputs:'import-base.json'};
+  const api=url.pathname.startsWith('/api/archive/'),part=api?url.pathname.slice('/api/archive/'.length):legacy[url.pathname];
+  if(!part)return null;
+  if(!files[part])return importJson({error:'Archive section unavailable.'},404);
+  const owner=request.headers.get('oai-authenticated-user-id');
+  if(!owner)return api?importJson({error:'Sign in again to load your saved archive.',signIn:'/signin-with-chatgpt?return_to=%2F'},401):null;
+  if(request.method!=='GET')return importJson({error:'Method not allowed.'},405);
+  const state=await archiveState(env,owner);
+  if(state){
+    const object=await env.ARCHIVE_FILES.get(state.parts[part]);
+    if(!object)return importJson({error:'The saved archive could not load. Please retry.'},503);
+    // Parts are read from one committed state. Clients validate the actual snapshot.
+    const headers={'content-type':'application/json','cache-control':'private, no-store','x-content-type-options':'nosniff','x-archive-revision':String(state.revision)};
+    if(part==='inputs')return importJson({inputs:await objectJson(object),revision:state.revision,snapshotId:state.parts.archive.split('/')[2]});
+    const data=await objectJson(object);
+    if(url.searchParams.has('snapshot')&&url.searchParams.get('snapshot')!==data.snapshotId)return importJson({error:'The archive changed in another window. Reload to use the latest source reports.'},409);
+    return new Response(JSON.stringify(data),{headers});
+  }
+  if(!api)return null;
+  const base=await env.ASSETS.fetch(new Request(new URL('/'+files[part],request.url),request));
+  if(!base.ok)return importJson({error:'The original archive is unavailable.'},base.status);
+  const data=await base.json();
+  if(part!=='inputs'&&url.searchParams.has('snapshot')&&url.searchParams.get('snapshot')!==data.snapshotId)return importJson({error:'The archive changed. Reload the archive.'},409);
+  return importJson(part==='inputs'?{inputs:data.inputs,revision:0,snapshotId:data.snapshotId}:data);
 }
 async function importBytes(request,max){
   if(Number(request.headers.get('content-length'))>max)throw importError('The import is too large.',413);

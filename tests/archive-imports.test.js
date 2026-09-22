@@ -54,3 +54,20 @@ test('PDF layout preserves paragraph breaks, generation headings, and source ima
  const OPS={save:1,restore:2,transform:3,paintImageXObject:4,paintInlineImageXObject:5,paintImageXObjectRepeat:6};
  const regions=imageRegions({fnArray:[1,3,4,2],argsArray:[[],[50,0,0,80,60,640],['image'],[]]},OPS,view);assert.deepEqual(regions,[[60,80,110,160]]);
 });
+test('explicit archive API serves the committed report instead of static baseline and pins every part',async()=>{
+ const {handleArchiveImports:handle,archivePart}=await import('../worker/archive-imports.mjs'),env=environment();let staticReads=0;
+ env.ASSETS={fetch:async()=>{staticReads++;return Response.json({snapshotId:'baseline',profiles:[],documents:[]});}};
+ await handle(request('/commit','POST',candidate()),env,base);
+ const read=(part,owner='owner',snapshot='')=>archivePart(new Request('https://example.test/api/archive/'+part+(snapshot?'?snapshot='+snapshot:''),{headers:owner?{'oai-authenticated-user-id':owner}:{}}),env);
+ const saved=await read('archive');assert.equal(saved.status,200);assert.equal((await saved.json()).documents[0].id,'new-report');assert.equal(staticReads,0);
+ assert.equal((await read('tree','owner','old-snapshot')).status,409);assert.equal((await read('tree','owner','candidate')).status,200);
+ assert.equal((await read('archive','')).status,401);assert.equal(staticReads,0);
+ assert.equal((await read('archive','another')).status,200);assert.equal(staticReads,1);
+ env.objects.delete(env.sql.prepare('SELECT body FROM archive_state').get().body&&JSON.parse(env.sql.prepare('SELECT body FROM archive_state').get().body).parts.archive);
+ assert.equal((await read('archive')).status,503);assert.equal(staticReads,1);
+});
+test('email-only requests cannot impersonate a stored archive owner',async()=>{
+ const {archivePart}=await import('../worker/archive-imports.mjs'),env=environment();
+ const response=await archivePart(new Request('https://example.test/api/archive/archive',{headers:{'oai-authenticated-user-email':'synthetic@example.test'}}),env);
+ assert.equal(response.status,401);assert.match((await response.json()).signIn,/^\/signin-with-chatgpt/);
+});

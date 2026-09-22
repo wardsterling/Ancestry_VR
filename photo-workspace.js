@@ -153,7 +153,7 @@
   }
   async function loadSourceMap(){
     if(sourceMapState!=='idle')return;sourceMapState='loading';
-    try{const response=await fetch('source-people.json',{cache:'no-store'});if(!response.ok)throw Error();sourceMap=await response.json();sourceMapState='ready';}
+    try{const response=await fetch('/api/archive/sourcePeople?snapshot='+encodeURIComponent(app()?.snapshotId||''),{cache:'no-store'});if(!response.ok)throw Error();sourceMap=await response.json();sourceMapState='ready';}
     catch{sourceMapState='unavailable';}
     renderSourcePeople();
   }

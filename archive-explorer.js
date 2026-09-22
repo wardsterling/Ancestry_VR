@@ -129,7 +129,7 @@
       $('#treeNote').textContent=this.treeAvailable?'Generations are numbered within each report. Cited family connections remain navigable when dates or photos are restricted. A family-group listing does not establish parentage. Select a name for evidence.':'Generation records are unavailable in this copy. Profiles remain accessible with generation unassigned.';
       this.setDepth();
       const shown=people.filter(p=>this.family.generation(p.id,s.report)===generation).length;
-      return {shown,total:people.length,label:`${shown} profiles in focus · ${people.length} in this report${s.focus?' branch':''} · ${matches.length} across all reports`};
+      return {shown,total:people.length,label:`${people.length.toLocaleString()} matches in selected report${s.focus?' branch':''} · ${shown.toLocaleString()} in foreground generation ${generation??'(unassigned)'}`};
     }
   }
   window.ArchiveExplorer=Explorer;

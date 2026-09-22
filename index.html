@@ -9,7 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23172e2a'/%3E%3Cpath d='M18 46V18h7l7 16 7-16h7v28h-7V31l-7 15-7-15v15z' fill='%23f1ca86'/%3E%3C/svg%3E">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="archive.css">
+  <link rel="stylesheet" href="archive.css"><link rel="stylesheet" href="person-insights.css">
   <link rel="stylesheet" href="archive-explorer.css">
   <link rel="stylesheet" href="report-edition.css">
   <link rel="stylesheet" href="photo-workspace.css"><link rel="stylesheet" href="archive-intake.css">
@@ -24,6 +24,7 @@
     <nav aria-label="Primary navigation">
       <a class="nav-button active" href="#wall" data-nav="wall">Explore wall</a>
       <a class="nav-button" href="#archive" data-nav="archive">Family tree &amp; archive</a>
+      <a class="nav-button" href="#insights" data-nav="insights">People insights</a>
       <a class="nav-button" href="#curator" data-nav="curator">Curator</a>
     </nav>
     <button id="helpButton" class="icon-button" aria-label="Open help">?</button>
@@ -180,7 +181,7 @@
         <div id="activeFilters" class="filter-chips" aria-label="Active filters"></div>
         <p id="searchValidation" class="search-error" role="alert" hidden></p>
       </div>
-      <div class="metrics"><div><strong id="profileMetric">—</strong><span>Profiles</span></div><div><strong id="placeMetric">—</strong><span>Historical places</span></div><div><strong>4</strong><span>Descendant reports</span></div><div><strong id="restrictedMetric">—</strong><span>Privacy-restricted</span></div></div>
+      <div class="metrics"><div><strong id="profileMetric">—</strong><span>People in entire archive</span></div><div><strong id="placeMetric">—</strong><span>Visible recorded places</span></div><div><strong id="reportMetric">—</strong><span>Incorporated reports</span></div><div><strong id="restrictedMetric">—</strong><span>Living or status unknown</span></div></div>
       <p id="archiveValidation" class="source-note" hidden></p>
       <div class="results-heading"><div><h2 id="resultTitle">Explore the family tree</h2><p id="resultSummary" class="muted" role="status">Loading the family archive…</p></div><button id="copyArchiveLink" class="secondary small">Copy view link</button></div>
       <div class="archive-view-tools">
@@ -226,6 +227,20 @@
       <section class="source-collections"><h2>Source collections</h2><div id="sourceCollectionList" class="source-grid"></div></section>
     </section>
 
+    <section id="insightsView" class="view" aria-labelledby="insightTitle">
+      <div class="insight-heading"><div><p class="eyebrow">Explore the people behind the numbers</p><h1 id="insightTitle">People insights</h1></div><button id="insightCopyLink" class="secondary">Copy view link</button></div>
+      <p id="insightStatus" class="insight-status" role="status">Loading the current family archive…</p><button id="insightRetry" class="secondary" hidden>Retry source statements</button>
+      <div id="insightContent" hidden>
+        <div id="insightTotals" class="insight-totals"></div>
+        <div class="insight-controls"><label>Break down by<select id="insightDimension"></select></label><label>Compare with<select id="insightCompare"></select></label><label>Sort categories<select id="insightSort"><option value="count">Most people first</option><option value="name">Category name</option></select></label><button id="insightReset" class="secondary">Reset filters</button></div>
+        <details class="insight-filter-form"><summary>Add or change a filter</summary><p>Choose one or more values in a category. Different categories narrow each other; values within a category are combined.</p><div class="insight-controls"><label>Category<select id="insightFilterDimension"></select></label><label>Values · select multiple if needed<select id="insightFilterValues" multiple size="5"></select></label><button id="insightApplyFilter" class="primary">Apply choices</button></div></details>
+        <div id="insightFilters" class="insight-chips" aria-label="Current filters"></div>
+        <div class="insight-grid"><section class="insight-panel"><h2 id="insightDistributionTitle">Birth state</h2><p id="insightCoverage" class="search-help"></p><div id="insightBars" class="insight-bars"></div></section><section class="insight-panel"><h2 id="insightPivotTitle">Compare categories</h2><div id="insightPivot" class="insight-pivot" tabindex="0" role="region" aria-label="Scrollable comparison table"></div></section></div>
+        <details class="insight-method"><summary>How these numbers are counted</summary><p>The grand total counts each archive profile once after evidence-based merges. Same-name records under review stay separate. Family groups are distinct cited parent sets with children, deduplicated across reports; a one-parent set and a two-parent set remain separate. Family listings are distinguished from parentage. A selected person can belong to several groups; the selection counts groups containing at least one selected person.</p><p>States come from explicitly recorded birth or death places. Town-only and unresolved places are grouped separately. Generations are relative to each report. Report, generation, family and statement categories can overlap, so their counts must not be added together. Every percentage uses the unique people in the current selection.</p><p>Education, health, occupation, residence and military counts use attributed statements extracted from source text. Gender is only categorized when explicitly labeled in a source; names and pronouns are not used to infer it. “Not recorded” means no supported value was extracted, not that the person lacked an education or condition. “Details hidden” follows the living-person switch. Original reports may contain errors; open the evidence before drawing conclusions.</p></details>
+        <h2 id="insightPeopleTitle">People in this selection</h2><p id="insightPeopleNote" role="status"></p><div id="insightPeople" class="insight-people"></div><button id="insightMore" class="secondary" hidden>Show more people</button>
+      </div>
+    </section>
+
     <section id="curatorView" class="view" aria-labelledby="curatorTitle">
       <div class="section-heading"><div><p class="eyebrow">Curator workspace</p><h1 id="curatorTitle">Register the family wall</h1></div><div><button class="secondary" id="importData">Import</button> <button class="primary" id="exportData">Export data</button></div></div>
       <div class="curator-grid">
@@ -240,6 +255,6 @@
   <dialog id="genericDialog"><button class="dialog-close" aria-label="Close">×</button><div id="genericDialogContent"></div></dialog>
   <input id="importFile" type="file" accept="application/json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-privacy.js"></script><script src="source-viewer.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="photo-research.js"></script><script src="search-ui.js"></script><script src="photo-workspace.js"></script><script src="archive-items.js"></script><script src="archive-intake.js"></script><script src="archive-import.js"></script>
+  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-privacy.js"></script><script src="source-viewer.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="photo-research.js"></script><script src="search-ui.js"></script><script src="photo-workspace.js"></script><script src="archive-items.js"></script><script src="archive-intake.js"></script><script src="archive-import.js"></script><script src="source-attributes.js"></script><script src="person-statistics.js"></script><script src="person-insights.js"></script>
 </body>
 </html>

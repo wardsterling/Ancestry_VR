@@ -12,6 +12,6 @@ export async function buildImportRuntime(output,archive){
   if(archive){
     const inputs={};for(const doc of archive.documents){inputs[doc.id]={text:execFileSync('pdftotext',['-layout',doc.url,'-'],{encoding:'utf8',maxBuffer:20*1024*1024})};}
     const checks=JSON.parse(await readFile('rebuild-checks.json','utf8'));
-    await writeFile(output+'/import-base.json',JSON.stringify({inputs,checks}));
+    await writeFile(output+'/import-base.json',JSON.stringify({inputs,checks,snapshotId:archive.snapshotId}));
   }
 }
