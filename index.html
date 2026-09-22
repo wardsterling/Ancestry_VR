@@ -10,18 +10,19 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="archive.css">
+  <link rel="stylesheet" href="archive-explorer.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
-    <button class="brand" data-nav="wall" aria-label="Go to family wall">
+    <a class="brand" href="#wall" data-nav="wall" aria-label="Go to family wall">
       <span class="brand-mark" aria-hidden="true">LW</span>
       <span><strong>The Living Family Wall</strong><small>This is my piece of the wall.</small></span>
-    </button>
+    </a>
     <nav aria-label="Primary navigation">
-      <button class="nav-button active" data-nav="wall">Explore wall</button>
-      <button class="nav-button" data-nav="archive">Archive</button>
-      <button class="nav-button" data-nav="curator">Curator</button>
+      <a class="nav-button active" href="#wall" data-nav="wall">Explore wall</a>
+      <a class="nav-button" href="#archive" data-nav="archive">Archive</a>
+      <a class="nav-button" href="#curator" data-nav="curator">Curator</a>
     </nav>
     <button id="helpButton" class="icon-button" aria-label="Open help">?</button>
     <form id="globalSearchForm" class="global-search search-widget" role="search" aria-label="Search the whole family archive">
@@ -82,12 +83,12 @@
         <img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy, reproduced from page 9 of the Brimage descendant report">
         <div class="profile-copy"><p class="eyebrow">Pilot profile · wall position needs confirmation</p><h1 id="profileName">Howard Pearson Kennedy</h1><p class="dates">1901–1978 · Worcester to Springfield</p>
           <p>This profile is built from a family descendant report. It is not a simulation of consciousness or recovered memory.</p>
-          <div class="profile-actions"><button class="primary" id="beginConversation">Begin conversation</button><button class="secondary" id="viewTimeline">View timeline</button></div>
+          <div class="profile-actions"><a class="primary" id="beginConversation" href="#conversation">Begin conversation</a><button class="secondary" id="viewTimeline">View timeline</button></div>
         </div>
         <div class="record-health"><span>Source readiness</span><strong>Reviewed pilot</strong><meter min="0" max="100" value="75">75%</meter><small>One report connected · more primary sources needed</small></div>
       </div>
       <div class="profile-grid">
-        <section class="card facts"><div class="card-heading"><h2>Documented facts</h2><button class="text-button evidence-trigger" data-evidence="report9">Show evidence</button></div><dl>
+        <section class="card facts"><div class="card-heading"><h2>Documented facts</h2><a class="text-button evidence-trigger" data-evidence="report9" href="#profile?evidence=report9">Show evidence</a></div><dl>
           <div><dt>Born</dt><dd>February 11, 1901<br><small>Worcester, Massachusetts</small></dd></div>
           <div><dt>Education</dt><dd>B.A., Howard University, 1924<br>M.D., Meharry Medical College, 1930</dd></div>
           <div><dt>Married</dt><dd>Marian Julia Hill<br><small>January 7, 1925 · New Bern, North Carolina</small></dd></div>
@@ -139,7 +140,24 @@
         <p id="searchValidation" class="search-error" role="alert" hidden></p>
       </div>
       <div class="metrics"><div><strong id="profileMetric">—</strong><span>Profiles</span></div><div><strong id="placeMetric">—</strong><span>Historical places</span></div><div><strong>4</strong><span>Descendant reports</span></div><div><strong id="restrictedMetric">—</strong><span>Privacy-restricted</span></div></div>
-      <div class="results-heading"><div><h2 id="resultTitle">Browse all profiles</h2><p id="resultSummary" class="muted" role="status">Loading the family archive…</p></div><label>Sort <select id="resultSort"><option value="relevance">Best match</option><option value="name">Name A–Z</option><option value="oldest">Earliest birth</option><option value="sources">Most source locations</option></select></label></div>
+      <div class="results-heading"><div><h2 id="resultTitle">Explore the family tree</h2><p id="resultSummary" class="muted" role="status">Loading the family archive…</p></div><button id="copyArchiveLink" class="secondary small">Copy view link</button></div>
+      <div class="archive-view-tools">
+        <label>View<select id="archiveMode"><option value="tree">Family tree</option><option value="hive">Hive</option><option value="list">Profile list</option></select></label>
+        <label id="hiveGroupControl" hidden>Group hive by<select id="hiveGroup"><option value="place">Place name</option><option value="name">Name A–Z</option><option value="generation">Report &amp; generation</option></select></label>
+        <label id="listSortControl" hidden>Sort list<select id="resultSort"><option value="relevance">Best match</option><option value="name">Name A–Z</option><option value="oldest">Earliest birth</option><option value="sources">Most source locations</option></select></label>
+      </div>
+      <input id="permalinkFallback" class="permalink-field" aria-label="Permanent link to copy" readonly hidden>
+      <div id="treeControls" class="tree-controls">
+        <label>Family report<select id="treeReport"><option value="">Loading reports…</option></select></label>
+        <label>Bring forward<select id="treeGeneration"><option value="">Loading generations…</option></select></label>
+        <label class="depth-control">Depth <output id="depthValue" for="treeDepth">65%</output><input id="treeDepth" type="range" min="0" max="100" value="65" aria-label="Family tree depth; zero for a flat view"></label>
+        <button id="treeReset" class="secondary small">Reset focus</button>
+      </div>
+      <section id="archiveExplorer" aria-label="Family archive explorer" hidden>
+        <div id="treeStage" class="tree-stage"><nav id="treeBreadcrumb" aria-label="Tree focus"></nav><div id="treeScene" class="tree-scene"></div></div>
+        <p id="treeNote" class="search-help"></p>
+        <div id="hiveResults" hidden></div>
+      </section>
       <div id="archiveResults" class="profile-results" aria-live="polite"></div>
       <button id="loadMore" class="secondary load-more" hidden>Show more profiles</button>
       <section class="source-collections"><h2>Source collections</h2><div class="source-grid"><article class="card"><strong>Brimage–Gatling</strong><span>40-page report · 2008</span></article><article class="card"><strong>Thomas Pinn</strong><span>110-page report · 2016</span></article><article class="card"><strong>Edward Turner</strong><span>87-page report · 2016</span></article><article class="card"><strong>Patrick Lee</strong><span>91-page report · 2016</span></article></div></section>
@@ -160,6 +178,6 @@
   <dialog id="profileDialog" class="profile-dialog"><button class="dialog-close" aria-label="Close">×</button><div id="profileDialogContent"></div></dialog>
   <input id="importFile" type="file" accept="application/json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="search-ui.js"></script>
+  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-explorer.js"></script><script src="search-ui.js"></script>
 </body>
 </html>

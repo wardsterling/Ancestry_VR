@@ -5,12 +5,14 @@
   const toast = $('#toast');
   let stream;
 
-  function showView(name) {
+  function showView(name, updateLink=true) {
     const id = `${name}View`;
     if (!views.some(v => v.id === id)) return showView('wall');
+    const alreadyActive=views.some(v=>v.id===id&&v.classList.contains('active'));
+    if(updateLink&&location.hash.split('?')[0]!==`#${name}`)history.pushState(null,'',`#${name}`);
     views.forEach(v => v.classList.toggle('active', v.id === id));
     $$('.nav-button').forEach(b => b.classList.toggle('active', b.dataset.nav === name));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if(!alreadyActive)window.scrollTo({ top: 0, behavior: 'smooth' });
     if (name === 'conversation' && !$('#messages').children.length) addGuide("Hello. I’m the family-history guide for Howard Pearson Kennedy. I answer from reviewed sources and tell you when the archive does not know. What would you like to explore?", false);
   }
 
@@ -19,14 +21,14 @@
     setTimeout(() => toast.classList.remove('show'), 2800);
   }
 
-  $$('[data-nav]').forEach(b => b.addEventListener('click', () => showView(b.dataset.nav)));
-  $$('[data-person="howard"]').forEach(b => b.addEventListener('click', () => showView('profile')));
-  $$('[data-person="marian"], [data-person="melvin"]').forEach(b => b.addEventListener('click', () => notify(`${window.LFW_DATA.people[b.dataset.person].name}: full profile planned for the next collection phase.`)));
+  $$('[data-nav]').forEach(b => b.addEventListener('click', event => {if(b.tagName==='A')return;showView(b.dataset.nav);}));
+  $$('[data-person="howard"]').filter(b=>b.tagName!=='A').forEach(b => b.addEventListener('click', () => showView('profile')));
+  $$('[data-person="marian"], [data-person="melvin"]').filter(b=>b.tagName!=='A').forEach(b => b.addEventListener('click', () => notify(`${window.LFW_DATA.people[b.dataset.person].name}: full profile planned for the next collection phase.`)));
   $$('[data-unassigned]').forEach(b => b.addEventListener('click', () => notify('Identity not yet assigned. Open Curator to review it with a family member.')));
-  $('#beginConversation').addEventListener('click', () => showView('conversation'));
 
   const evidenceDialog = $('#evidenceDialog');
-  $$('.evidence-trigger').forEach(b => b.addEventListener('click', () => evidenceDialog.showModal()));
+  $$('.evidence-trigger').filter(b=>b.tagName!=='A').forEach(b => b.addEventListener('click', () => evidenceDialog.showModal()));
+  evidenceDialog.addEventListener('close',()=>{if(location.hash.includes('evidence=report9'))history.replaceState(null,'','#profile');});
   $$('.dialog-close').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
   $$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
 
@@ -76,5 +78,8 @@
   window.LFW = { showView, notify };
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
-  showView(location.hash.slice(1) || 'wall');
+  const restoreView=()=>{const name=location.hash.slice(1).split('?')[0];if(name==='main')return;showView(name||'wall',false);const showEvidence=name==='profile'&&new URLSearchParams(location.hash.split('?')[1]||'').get('evidence')==='report9';if(showEvidence&&!evidenceDialog.open)evidenceDialog.showModal();else if(!showEvidence&&evidenceDialog.open)evidenceDialog.close();};
+  window.addEventListener('hashchange',restoreView);
+  window.addEventListener('popstate',restoreView);
+  restoreView();
 })();

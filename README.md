@@ -1,6 +1,6 @@
 # The Living Family Wall
 
-Static web MVP with a global, browser-local family archive search.
+Static web MVP with a family tree, grouped hive, and browser-local archive search.
 
 ## Public code / private data
 
@@ -9,7 +9,7 @@ only to an owner-private deployment. Its absence produces a clear empty state, n
 a broken application. Existing pilot content and previously published assets remain
 unchanged; a code-only update does not remove them from Git history.
 
-Never push `archive-data.json`, `dist/`, source reports, screenshots of family data,
+Never push `archive-data.json`, `archive-tree.json`, `dist/`, source reports, screenshots of family data,
 deployment archives, credentials, or Python caches to public GitHub. The ignore rules
 are a safeguard, not a substitute for reviewing staged files.
 
@@ -30,6 +30,45 @@ Dates currently mean **recorded years**, not day-level dates or inferred lifespa
 The search indexes profile names/aliases, allowed places/years, and source titles;
 it does not index arbitrary raw report narratives. Search does not verify genealogy,
 perform identity matching, infer new relationships, or correct extraction errors.
+
+## Tree, hive, and permanent links
+
+The archive opens in **Family tree** view. Select a family report, bring a generation
+forward, then focus a person's branch to see that person's recorded ancestors and
+descendants. The foreground stays readable while adjacent generations recede in
+perspective. Mouse movement adds subtle parallax; touch users have the same generation
+and branch controls. Depth zero gives a flat view, and reduced-motion preferences
+disable animation and parallax.
+
+The **Hive** groups profiles by place name, display-name initial, or report and
+generation. A person can belong to multiple place groups. Groups and large collections
+expand incrementally. **Profile list** preserves the original search and sorting tools.
+
+Generations are relative to each report's root, not estimates based on birth years.
+`scripts/build_tree.py` reads layout-preserving `.txt` exports of the source reports
+beside the original uploads and writes private `archive-tree.json`. It matches existing
+profile IDs, uses explicit generation headings and child lists, and cites report pages.
+It never rebuilds or changes the existing profiles. Missing, conflicting, and restricted
+generation assignments remain unassigned. Existing same-name merges limit the accuracy
+of this view; report-derived links still require family review.
+
+Profiles, places, report selections, recorded years, tree focus, and search/filter state
+have hash-based URLs. They survive refresh and support browser Back/Forward and opening
+in another tab. Copy profile link creates a minimal stable-ID link; Copy view link
+includes the current view, filters, report, generation, and depth. Links grant no access
+to the private Site. Search text is held in the URL fragment and browser history;
+there is no external query logging or localStorage query history.
+
+Examples using synthetic identifiers only:
+
+- `#archive` — default family tree
+- `#archive?view=hive&group=place` — place hive
+- `#archive?person=stable-id` — profile
+- `#archive?report=source-id&generation=3&focus=stable-id` — focused family branch
+
+The optional tree file has `memberships` containing `profileId`, `reportId`,
+`generation`, `page`, and `title`, and `edges` containing `parentId`, `childId`,
+`reportId`, and `page`. Both data files are private runtime inputs, never public code.
 
 ## Run and test
 
@@ -77,8 +116,8 @@ server-side person-level authorization. All allowed Site viewers can retrieve it
 file. Other profiles' imported narratives may mention living relatives. Keep the full
 collection owner-private until it has been reviewed or a server-side policy is added.
 
-Queries are processed locally with no external search service, analytics, or stored
-search history. The service worker removes the older archive caches and only caches
+Queries are processed locally with no external search service or analytics. Persistent
+view links place the current query in browser history. The service worker removes the older archive caches and only caches
 the app shell; archive requests are network-only. Offline access to family records is
 therefore intentionally unavailable.
 
@@ -91,6 +130,8 @@ Source labels point to the supplied reports and do not establish independent pro
 - `search-engine.js`: data-independent indexing, matching, suggestions, and filters
 - `search-ui.js`: global combobox, archive results, and profile dialogs
 - `archive.css`: responsive search styling
+- `archive-model.js`: validated URLs, report generations, groups, and family relations
+- `archive-explorer.js`, `archive-explorer.css`: family tree, parallax, and hive interface
 - `app.js`, `index.html`, `styles.css`: existing app and pilot interface
 - `tests/`: synthetic-only regression checks
 - `scripts/build-static.mjs`: explicit static package preparation

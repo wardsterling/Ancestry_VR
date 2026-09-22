@@ -1,6 +1,7 @@
 .DS_Store
 *.log
 archive-data.json
+archive-tree.json
 dist/
 upload/
 output/

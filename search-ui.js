@@ -5,12 +5,35 @@
   const $$ = s => [...document.querySelectorAll(s)];
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const engine = window.FamilySearch;
+  const Model=window.ArchiveModel;
+  const route=Model.read(location.hash);
+  let restoring=false;
+  const href=patch=>Model.link(route,patch);
+  const explorer=new window.ArchiveExplorer(route,(patch)=>{Object.assign(route,patch);if(patch.focus){resetTools();setQuery('');matches=index?index.search('',options()):[];}limit=36;renderResults();writeRoute(true);});
   const fieldIds = {name:'nameFilter',place:'placeFilter',source:'sourceFilter',status:'statusFilter',from:'yearFrom',to:'yearTo'};
   const fieldLabels = {name:'Name',place:'Place',source:'Report',status:'Status',from:'From',to:'To'};
   let index = null, profiles = [], matches = [], limit = 36, scope = 'all', loading = true, loadError = '';
   const controllers = [];
   const debounce = (fn, delay=120) => { let timer; const f=(...args)=>{clearTimeout(timer);timer=setTimeout(()=>fn(...args),delay);}; f.cancel=()=>clearTimeout(timer); return f; };
   const options = () => ({...Object.fromEntries(Object.entries(fieldIds).map(([key,id])=>[key,$('#'+id).value.trim()])),scope,fuzzy:$('#fuzzySearch').checked});
+  function writeRoute(push=false) {
+    if(restoring||!location.hash.startsWith('#archive'))return;
+    Object.assign(route,options(),{q:$('#archiveSearch').value,sort:$('#resultSort').value,fuzzy:$('#fuzzySearch').checked?'1':'0',limit:String(limit)});
+    const next=href({});if(next!==location.hash)history[push?'pushState':'replaceState'](null,'',next);
+  }
+  function restoreRoute() {
+    if(!location.hash.startsWith('#archive'))return;
+    restoring=true;Object.assign(route,Model.read(location.hash));
+    Object.entries(fieldIds).forEach(([key,id])=>$('#'+id).value=route[key]);
+    setQuery(route.q);setScope(route.scope);$('#resultSort').value=route.sort;$('#fuzzySearch').checked=route.fuzzy!=='0';
+    const savedLimit=Number(route.limit);runSearch();limit=savedLimit;renderResults();
+    if(!loading){if(route.person)openProfile(route.person,false);else if($('#profileDialog').open)$('#profileDialog').close();}
+    restoring=false;
+  }
+  async function copyLink(url) {
+    try{await navigator.clipboard.writeText(new URL(url,location.href).href);window.LFW.notify('Link copied. Site access is still required.');}
+    catch{const input=$('#profileDialog').open?$('#profilePermalink'):$('#permalinkFallback');input.hidden=false;input.value=new URL(url,location.href).href;input.focus();input.select();window.LFW.notify('Select and copy the displayed link.');}
+  }
   function dates(p) {
     if (p.restricted) return 'Details restricted';
     return p.birthYear && p.deathYear ? `${p.birthYear}–${p.deathYear}` : p.birthYear ? `Born ${p.birthYear} (reported)` : p.deathYear ? `Died ${p.deathYear} (reported)` : 'Dates not recorded';
@@ -50,33 +73,47 @@
     if (sort==='name') ordered.sort((a,b)=>a.profile.name.localeCompare(b.profile.name));
     if (sort==='oldest') ordered.sort((a,b)=>((a.profile.restricted?9999:a.profile.birthYear||9999)-(b.profile.restricted?9999:b.profile.birthYear||9999))||a.profile.name.localeCompare(b.profile.name));
     if (sort==='sources') ordered.sort((a,b)=>b.profile.sources.length-a.profile.sources.length||a.profile.name.localeCompare(b.profile.name));
-    $('#archiveResults').innerHTML=ordered.slice(0,limit).map(({profile:p,approximate})=>
-      `<button class="archive-profile card" data-profile-id="${escape(p.id)}"><span class="profile-monogram" aria-hidden="true">${escape(p.name.split(/\s+/).slice(0,2).map(w=>w[0]).join(''))}</span><span class="profile-card-copy"><strong>${escape(p.name)}</strong><small>${escape(dates(p))}</small><em>${p.restricted?'Restricted pending family review':escape(p.places.slice(0,2).join(' · ')||'Open report evidence')}</em></span><span class="source-count">${p.sources.length} source location${p.sources.length===1?'':'s'}${approximate?' · Similar spelling':''}</span></button>`
+    const visual=explorer.render(ordered,limit);
+    $('#listSortControl').hidden=route.view!=='list';
+    $('#archiveResults').hidden=!!visual;
+    $('#archiveResults').innerHTML=visual?'':ordered.slice(0,limit).map(({profile:p,approximate})=>
+      `<a href="${escape(href({person:p.id}))}" class="archive-profile card" data-profile-id="${escape(p.id)}"><span class="profile-monogram" aria-hidden="true">${escape(p.name.split(/\s+/).slice(0,2).map(w=>w[0]).join(''))}</span><span class="profile-card-copy"><strong>${escape(p.name)}</strong><small>${escape(dates(p))}</small><em>${p.restricted?'Restricted pending family review':escape(p.places.slice(0,2).join(' · ')||'Open report evidence')}</em></span><span class="source-count">${p.sources.length} source location${p.sources.length===1?'':'s'}${approximate?' · Similar spelling':''}</span></a>`
     ).join('');
     if (!ordered.length) {
       $('#archiveResults').innerHTML=`<div class="empty-result card"><h2>${loading?'Loading archive…':loadError?'Archive not connected':'No matching profiles'}</h2><p>${escape(loading?'Please wait a moment.':loadError||'Try fewer words, allow minor spelling errors, or remove a filter.')}</p>${loadError?'<button id="retryArchive" class="secondary">Try loading again</button>':''}</div>`;
     }
     const shown=Math.min(limit,ordered.length);
-    $('#loadMore').hidden=shown>=ordered.length;
+    $('#loadMore').hidden=!!visual||shown>=ordered.length;
     $('#loadMore').textContent=`Show more (${Math.max(0,ordered.length-shown)} remaining)`;
     const approx=ordered.filter(r=>r.approximate).length;
-    $('#resultSummary').textContent=loading?'Loading the family archive…':loadError?'No family records are included in this code-only copy.':`${ordered.length.toLocaleString()} matching profiles · showing ${shown.toLocaleString()}${approx?` · ${approx} similar-spelling matches`:''}`;
+    $('#resultSummary').textContent=loading?'Loading the family archive…':loadError?'No family records are included in this code-only copy.':`${ordered.length.toLocaleString()} matching profiles · ${visual?visual.label:'showing '+shown.toLocaleString()}${approx?` · ${approx} similar-spelling matches`:''}`;
   }
   function runSearch() {
     limit=36; chips();
     const error=validation();
     $('#searchValidation').hidden=!error; $('#searchValidation').textContent=error;
     matches=index&&!error?index.search($('#archiveSearch').value,options()):[];
-    $('#resultTitle').textContent=$('#archiveSearch').value.trim()?`Results for “${$('#archiveSearch').value.trim()}”`:'Browse all profiles';
+    $('#resultTitle').textContent=$('#archiveSearch').value.trim()?`Results for “${$('#archiveSearch').value.trim()}”`:'Explore the family archive';
     renderResults();
+    writeRoute();
   }
-  function openProfile(id) {
-    const p=profiles.find(p=>p.id===id); if(!p)return;
+  function openProfile(id,push=true) {
+    const p=profiles.find(p=>p.id===id); if(!p){if(!loading)window.LFW.notify('This profile link is not in the connected archive.');return;}
+    route.person=id;if(push)writeRoute(true);
     closePanels();
     const evidence=p.restricted?'<div class="privacy-panel"><strong>Details restricted</strong><p>Dates, places, and excerpts are withheld for this profile pending family review.</p></div>':
       (p.facts.length?p.facts.map(f=>`<blockquote>${escape(f)}</blockquote>`).join(''):'<p>No narrative was extracted for this entry.</p>');
     $('#profileDialogContent').innerHTML=`<p class="eyebrow">Archive profile · report-derived</p><h1>${escape(p.name)}</h1><p class="dates">${escape(dates(p))}</p>${!p.restricted&&p.places.length?`<p class="place-list">${p.places.map(escape).join(' · ')}</p>`:''}<section><h2>Report evidence</h2>${evidence}</section><section><h2>Source locations</h2><ul class="profile-sources">${p.sources.map(s=>`<li><strong>${escape(s.title)}</strong><span>Page ${escape(s.page)}</span></li>`).join('')}</ul></section><p class="source-note">Automatically extracted from compiled reports; names, dates, and same-name merges need family review. Source locations refer to the uploaded reports, not independently verified original records.</p>`;
-    $('#profileDialog').showModal();
+    const family=explorer.family,report=p.sources.some(s=>s.reportId===route.report)?route.report:p.sources[0]?.reportId||'';
+    const relatives=family.relatives(id,report),gen=family.generation(id,report);
+    const tools=`<div class="profile-link-tools"><button class="secondary small" id="copyProfileLink">Copy profile link</button><a class="secondary small" href="${escape(href({person:'',view:'tree',report,focus:id,generation:String(gen??'unknown'),q:'',name:'',place:'',source:'',status:'',from:'',to:''}))}">Focus in family tree</a></div><input id="profilePermalink" class="permalink-field" aria-label="Permanent profile link to copy" readonly hidden>`;
+    const linkedPlaces=!p.restricted?p.places.map(place=>`<a href="${escape(href({person:'',place,focus:'',view:'hive',group:'place'}))}">${escape(place)}</a>`).join(' · '):'';
+    const linkedYears=!p.restricted?[p.birthYear,p.deathYear].filter(Boolean).map(year=>`<a href="${escape(href({person:'',q:'',from:String(year),to:String(year),focus:'',view:'list'}))}">${escape(year)}</a>`).join(' · '):'';
+    const related=[...relatives.parents.map(p=>({p,label:'Parent'})),...relatives.children.map(p=>({p,label:'Child'}))];
+    $('#profileDialogContent').insertAdjacentHTML('afterbegin',tools);
+    $('#profileDialogContent').insertAdjacentHTML('beforeend',`<section><h2>Explore related records</h2>${linkedPlaces?`<p>${linkedPlaces}</p>`:''}${linkedYears?`<p>Recorded years: ${linkedYears}</p>`:''}<div class="tree-relatives">${related.map(({p,label})=>`<a data-profile-id="${escape(p.id)}" href="${escape(href({person:p.id}))}">${label}: ${escape(p.name)}</a>`).join('')}</div><p>${gen===null?'Generation unassigned':'Generation '+gen+' in '+escape(family.reports.find(r=>r.id===report)?.title||'this report')}</p>${p.sources.map(s=>`<a href="${escape(href({person:'',source:s.reportId,report:s.reportId,view:'tree',focus:'',generation:''}))}">${escape(s.title)} · page ${escape(s.page)}</a>`).join('<br>')}</section>`);
+    $('#copyProfileLink').addEventListener('click',()=>copyLink(Model.link({person:id})));
+    if(!$('#profileDialog').open)$('#profileDialog').showModal();
   }
 
   // Accessible combobox: input retains focus and the active option is announced.
@@ -85,7 +122,7 @@
     const close=()=>{list.hidden=true;active=-1;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');};
     const choose=item=>{
       pendingArchive.cancel();
-      if(global)resetTools();
+      if(global){resetTools();route.focus='';route.generation='';}
       if(item.kind==='name')setQuery(item.value);
       else {
         setQuery(''); setScope('all');
@@ -126,7 +163,7 @@
   }
   function submitGlobal() {
     pendingArchive.cancel();const query=$('#globalSearch').value;
-    resetTools();setQuery(query);closePanels();window.LFW.showView('archive');runSearch();
+    resetTools();route.focus='';route.generation='';setQuery(query);closePanels();window.LFW.showView('archive');runSearch();
   }
   const pendingArchive=debounce(()=>{setQuery($('#archiveSearch').value);runSearch();});
   combobox($('#globalSearch'),$('#globalSuggestions'),true);
@@ -134,17 +171,22 @@
   $('#globalSearchForm').addEventListener('submit',event=>{event.preventDefault();submitGlobal();});
   $('#archiveSearch').addEventListener('input',pendingArchive);
   $('#clearSearch').addEventListener('click',()=>{pendingArchive.cancel();setQuery('');closePanels();runSearch();$('#archiveSearch').focus();});
-  $('#resetFilters').addEventListener('click',()=>{pendingArchive.cancel();resetTools();setQuery('');closePanels();runSearch();});
+  $('#resetFilters').addEventListener('click',()=>{pendingArchive.cancel();resetTools();route.focus='';route.generation='';setQuery('');closePanels();runSearch();});
   $$('[data-scope]').forEach(b=>b.addEventListener('click',()=>{setScope(b.dataset.scope);closePanels();runSearch();}));
   Object.values(fieldIds).forEach(id=>$('#'+id).addEventListener('input',()=>{closePanels();runSearch();}));
   $('#fuzzySearch').addEventListener('change',()=>{closePanels();runSearch();});
-  $('#resultSort').addEventListener('change',renderResults);
-  $('#loadMore').addEventListener('click',()=>{limit+=36;renderResults();});
+  $('#resultSort').addEventListener('change',()=>{renderResults();writeRoute(true);});
+  $('#loadMore').addEventListener('click',()=>{limit+=36;renderResults();writeRoute();});
   $('#activeFilters').addEventListener('click',event=>{const b=event.target.closest('[data-clear-filter]');if(b){$('#'+fieldIds[b.dataset.clearFilter]).value='';runSearch();}});
-  $('#archiveResults').addEventListener('click',event=>{
-    const card=event.target.closest('[data-profile-id]');if(card)openProfile(card.dataset.profileId);
+  document.addEventListener('click',event=>{
+    if(event.defaultPrevented||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey||event.button>0)return;
+    const card=event.target.closest('[data-profile-id]');if(card){event.preventDefault();openProfile(card.dataset.profileId);}
     if(event.target.id==='retryArchive')loadArchive();
   });
+  $('#copyArchiveLink').addEventListener('click',()=>{writeRoute();copyLink(href({person:''}));});
+  $('#profileDialog').addEventListener('close',()=>{if(!restoring&&route.person){route.person='';writeRoute();}});
+  window.addEventListener('hashchange',restoreRoute);
+  window.addEventListener('popstate',restoreRoute);
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.search-widget'))closePanels();});
   document.addEventListener('keydown',event=>{
     if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&!document.querySelector('dialog[open]')){
@@ -164,6 +206,9 @@
         facts:Array.isArray(p.facts)?p.facts:[],years:Array.isArray(p.years)?p.years:[],
         sources:Array.isArray(p.sources)?p.sources.filter(s=>s&&typeof s.title==='string'&&typeof s.reportId==='string'):[]}));
       index=new engine.Index(profiles);
+      let tree=null;
+      try{const response=await fetch('archive-tree.json',{cache:'no-store',signal:abort.signal});if(response.ok)tree=await response.json();}catch{}
+      explorer.setData(profiles,tree);
       const facets=index.facets();
       $('#profileMetric').textContent=profiles.length.toLocaleString();
       $('#placeMetric').textContent=facets.places.length.toLocaleString();
@@ -176,7 +221,7 @@
       loadError=error.message==='missing'?'The public code does not include family data. The full archive is available only in the private Sites preview.':'The archive could not be loaded. Check your connection, then try again.';
       ['profileMetric','placeMetric','restrictedMetric'].forEach(id=>$('#'+id).textContent='—');
     } finally {
-      clearTimeout(timer);loading=false;runSearch();controllers.filter(c=>document.activeElement===c.input).forEach(c=>c.refresh());
+      clearTimeout(timer);loading=false;if(location.hash.startsWith('#archive'))restoreRoute();else runSearch();controllers.filter(c=>document.activeElement===c.input).forEach(c=>c.refresh());
     }
   }
   setScope('all');loadArchive();
