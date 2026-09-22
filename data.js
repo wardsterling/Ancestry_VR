@@ -1,9 +1,9 @@
 window.LFW_DATA = {
   version: 1,
   people: {
-    howard: { name: "Howard Pearson Kennedy", years: "1901–1978", relationship: "Pilot profile" },
+    howard: { name: "Howard Pearson Kennedy", years: "1901–1978", relationship: "Pilot profile", archiveId: "howardpearsonkennedy", portrait: "assets/howard-kennedy.jpg" },
     marian: { name: "Marian Julia Hill", years: "1903–1980", relationship: "Howard’s wife" },
-    melvin: { name: "Melvin Dow Kennedy", years: "1905–1989", relationship: "Howard’s brother" }
+    melvin: { name: "Melvin Dow Kennedy", years: "1905–1989", relationship: "Howard’s brother", archiveId: "melvindowkennedy", portrait: "assets/melvin-kennedy.jpg" }
   },
   answers: [
     { terms: ["who", "howard", "introduce"], text: "Howard Pearson Kennedy was born in Worcester, Massachusetts, on February 11, 1901. The family report records that he earned a B.A. from Howard University in 1924 and an M.D. from Meharry Medical College in 1930. He died in Springfield, Massachusetts, on December 31, 1978.", evidence: true },

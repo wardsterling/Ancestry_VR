@@ -6,11 +6,12 @@ const vm=require('node:vm');
 const path=require('node:path');
 const FamilySearch=require('../search-engine');
 const ArchiveModel=require('../archive-model');
+const ProfilePresentation=require('../profile-presentation');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=fs.readFileSync(path.join(__dirname,'../search-ui.js'),'utf8');
 const fixture={profiles:[{id:'synthetic',name:'Example Test Person',aliases:['Tester'],birthYear:1800,deathYear:1870,
   years:['1800','1870'],places:['Demo City, VA'],facts:['Synthetic statement only.'],sources:[{reportId:'demo',title:'Synthetic report',page:1}],restricted:false}]};
-async function setup(missing=false,hash='#archive',treeMissing=false) {
+async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null) {
   const nodes=new Map(), scopes=[];
   class Element {
     constructor(id,tag='DIV'){this.id=id;this.tagName=tag;this.value='';this.checked=false;this.hidden=false;this.open=false;this.textContent='';this.dataset={};this.attributes={};this.handlers={};this.options=[];this.selectedIndex=0;this.classList={toggle(){}};this.style={setProperty(){}};nodes.set(id,this);}
@@ -40,9 +41,9 @@ async function setup(missing=false,hash='#archive',treeMissing=false) {
   const location={hash,href:'https://example.test/'+hash};
   const history={pushState(a,b,url){location.hash=url;location.href='https://example.test/'+url;},replaceState(a,b,url){this.pushState(a,b,url);}};
   const events={};
-  const window={FamilySearch,ArchiveModel,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
-  const metadata={memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
-  const context=vm.createContext({window,document,location,history,navigator:{},URL,URLSearchParams,fetch:async url=>({ok:!missing&&!(treeMissing&&url==='archive-tree.json'),status:missing?404:200,json:async()=>structuredClone(url==='archive-tree.json'?metadata:fixture)}),AbortController,setTimeout,clearTimeout});
+  const window={FamilySearch,ArchiveModel,ProfilePresentation,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
+  const metadata=treeData||{memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
+  const context=vm.createContext({window,document,location,history,navigator:{},URL,URLSearchParams,fetch:async url=>({ok:!missing&&!(treeMissing&&url==='archive-tree.json'),status:missing?404:200,json:async()=>structuredClone(url==='archive-tree.json'?metadata:archive)}),AbortController,setTimeout,clearTimeout});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-explorer.js'),'utf8'),context);
   vm.runInContext(script,context);
   await new Promise(resolve=>setImmediate(resolve));
@@ -101,4 +102,28 @@ test('view selection and flat depth persist in the copied browser URL',async()=>
   const {nodes,location}=await setup();nodes.get('treeDepth').value='0';nodes.get('treeDepth').emit('change');
   assert.match(location.hash,/depth=0/);nodes.get('archiveMode').value='hive';nodes.get('archiveMode').emit('change');
   assert.match(location.hash,/view=hive/);assert.equal(nodes.get('treeControls').hidden,true);
+});
+test('visual tree presents a thumbnail slot, name and explicit life-event labels',async()=>{
+  const {nodes}=await setup();const tree=nodes.get('connectionTree').innerHTML;
+  assert.match(tree,/person-thumbnail/);assert.match(tree,/No photo yet/);assert.match(tree,/Example Test Person/);
+  for(const label of ['Date of birth','Place of birth','Date of death'])assert(tree.includes(label));
+  assert.match(tree,/focus=synthetic/);assert.match(tree,/Open profile &amp; evidence/);
+  assert.match(tree,/Not recorded/);assert.doesNotMatch(tree,/Demo City/);
+});
+test('connection cards follow saved profile focus and hide in hive mode',async()=>{
+  const app=await setup(false,'#archive?focus=synthetic&report=demo');
+  assert.equal(app.nodes.get('connectionName').textContent,'Example Test Person');
+  app.go('#archive?view=hive');assert.equal(app.nodes.get('familyConnections').hidden,true);
+});
+test('connected parent and child nodes navigate by keyboard and retain permanent links',async()=>{
+  const child={...fixture.profiles[0],birthDate:'1 Jan 1800',birthPlace:'Demo Town',deathDate:'1870',portrait:{src:'assets/synthetic.jpg'}};
+  const parent={...fixture.profiles[0],id:'parent',name:'Parent Example'};
+  const metadata={memberships:[{profileId:'parent',reportId:'demo',generation:1},{profileId:'synthetic',reportId:'demo',generation:2}],edges:[{parentId:'parent',childId:'synthetic',reportId:'demo'}]};
+  const app=await setup(false,'#archive?focus=synthetic&report=demo',false,{profiles:[parent,child]},metadata);
+  assert.match(app.nodes.get('connectionTree').innerHTML,/src="assets\/synthetic.jpg"/);
+  assert.match(app.nodes.get('connectionTree').innerHTML,/Date of birth/);
+  assert.match(app.nodes.get('connectionTree').innerHTML,/from=1800/);
+  app.nodes.get('familyConnections').emit('keydown',{key:'ArrowUp',target:{closest:()=>({dataset:{kinshipId:'synthetic'}})}});
+  assert.equal(app.nodes.get('connectionName').textContent,'Parent Example');assert.match(app.location.hash,/focus=parent/);
+  assert.match(app.nodes.get('connectionTree').innerHTML,/Children <span>\(1\)/);
 });

@@ -2,7 +2,7 @@
 import {copyFile,cp,mkdir,access} from 'node:fs/promises';
 import path from 'node:path';
 const root=process.cwd();
-const files=['index.html','styles.css','archive.css','archive-explorer.css','archive-model.js','archive-explorer.js','app.js','search-engine.js','search-ui.js','data.js','manifest.webmanifest','sw.js'];
+const files=['index.html','styles.css','archive.css','archive-explorer.css','archive-model.js','profile-presentation.js','archive-explorer.js','app.js','search-engine.js','search-ui.js','data.js','manifest.webmanifest','sw.js'];
 await mkdir(path.join(root,'dist'),{recursive:true});
 for(const file of files)await copyFile(path.join(root,file),path.join(root,'dist',file));
 await cp(path.join(root,'assets'),path.join(root,'dist','assets'),{recursive:true});

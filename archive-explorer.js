@@ -6,7 +6,7 @@
   const M=window.ArchiveModel;
   class Explorer {
     constructor(state,change) {
-      this.state=state;this.change=change;this.family=new M.Family();this.matches=[];this.treeAvailable=false;this.groupCount=24;
+      this.state=state;this.change=change;this.family=new M.Family();this.matches=[];this.treeAvailable=false;this.groupCount=24;this.cards=new Map();
       for(const id of ['archiveMode','hiveGroup','treeReport','treeGeneration','treeDepth'])$('#'+id).addEventListener('change',()=>{
         const key={archiveMode:'view',hiveGroup:'group',treeReport:'report',treeGeneration:'generation',treeDepth:'depth'}[id];
         const patch={[key]:$('#'+id).value};if(key==='report'){patch.generation='';patch.focus='';}this.change(patch);
@@ -21,6 +21,16 @@
         if(b.dataset.hiveMore!==undefined){this.groupCount+=24;this.render(this.matches,this.limit);}
       });
       this.groupLimit=new Map();
+      $('#familyConnections').addEventListener('keydown',event=>{
+        const node=event.target.closest('[data-kinship-id]');if(!node||!['ArrowUp','ArrowDown'].includes(event.key))return;
+        const r=this.family.relatives(node.dataset.kinshipId,this.state.report);
+        const next=(event.key==='ArrowUp'?r.parents:r.children)[0];if(!next)return;
+        event.preventDefault();this.change({focus:next.id,generation:String(this.family.generation(next.id,this.state.report)??'unknown')});$('#kinshipFocusLink')?.focus();
+      });
+      $('#archiveExplorer').addEventListener('error',event=>{
+        const img=event.target;if(img.tagName!=='IMG'||!img.hasAttribute('data-archive-portrait'))return;
+        img.hidden=true;const fallback=img.parentElement.querySelector('.portrait-fallback');if(fallback)fallback.hidden=false;
+      },true);
       $('#treeStage').addEventListener('pointermove',event=>{
         if(event.pointerType!=='mouse'||this.reduced())return;
         const rect=$('#treeStage').getBoundingClientRect();
@@ -30,7 +40,7 @@
       $('#treeStage').addEventListener('pointerleave',()=>{for(const k of ['--look-x','--look-y'])$('#treeScene').style.setProperty(k,'0px');});
     }
     reduced(){return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;}
-    setData(profiles,data){this.family=new M.Family(profiles,data||{});this.treeAvailable=!!data?.memberships?.length;}
+    setData(profiles,data){this.family=new M.Family(profiles,data||{});this.treeAvailable=!!data?.memberships?.length;this.cards=new Map(profiles.map(p=>[p.id,window.ProfilePresentation.describe(p,window.LFW_DATA?.people||{})]));}
     href(patch){return M.link(this.state,patch.focus?{q:'',name:'',place:'',source:'',status:'',from:'',to:'',person:'',...patch}:patch);}
     setDepth(){
       const depth=this.reduced()?0:Number(this.state.depth);
@@ -40,13 +50,32 @@
       }
       $('#depthValue').textContent=this.reduced()?'Motion reduced':Number(this.state.depth)===0?'Flat':`${this.state.depth}%`;
     }
+    portrait(p){
+      const d=this.cards.get(p.id);
+      return `<span class="person-thumbnail">${d.portrait?`<img src="${esc(d.portrait)}" alt="Portrait of ${esc(p.name)}" width="72" height="88" loading="lazy" decoding="async" data-archive-portrait>`:''}<span class="portrait-fallback"${d.portrait?' hidden':''}><span aria-hidden="true">${esc(d.initials)}</span><small>${d.photoLabel}</small></span></span>`;
+    }
+    vitals(p){
+      const d=this.cards.get(p.id);
+      const yearLink=value=>{const year=value.match(/\b[12]\d{3}\b/)?.[0];return year?`<a title="Search records mentioning ${year}" href="${esc(this.href({view:'list',q:'',name:'',place:'',source:'',status:'',focus:'',person:'',from:year,to:year}))}">${esc(value)}</a>`:esc(value);};
+      const birthPlace=['Not recorded','Restricted','Conflicting records'].includes(d.birthPlace)?esc(d.birthPlace):`<a href="${esc(this.href({view:'hive',group:'place',place:d.birthPlace,q:'',name:'',source:'',status:'',focus:'',person:'',from:'',to:''}))}">${esc(d.birthPlace)}</a>`;
+      return `<dl class="person-vitals"><div><dt><abbr title="Date of birth">DoB</abbr></dt><dd>${yearLink(d.birthDate)}</dd></div><div><dt><abbr title="Place of birth">PoB</abbr></dt><dd>${birthPlace}</dd></div><div><dt><abbr title="Date of death">DoD</abbr></dt><dd>${yearLink(d.deathDate)}</dd></div></dl>`;
+    }
+    connectionCard(p,selected=false){
+      const g=this.family.generation(p.id,this.state.report);
+      return `<article class="connection-person${selected?' selected-connection':''}"><a ${selected?'id="kinshipFocusLink" aria-current="true" ':''}class="connection-person-link" data-kinship-id="${esc(p.id)}" href="${esc(this.href({focus:p.id,generation:String(g??'unknown')}))}" aria-label="Focus family tree on ${esc(p.name)}">${this.portrait(p)}<span><strong>${esc(p.name)}</strong><small>${g===null?'Generation unassigned':'Generation '+g}</small></span></a>${this.vitals(p)}<a class="connection-profile-link" data-profile-id="${esc(p.id)}" href="${esc(this.href({person:p.id}))}">Open profile &amp; evidence</a></article>`;
+    }
+    connections(selected){
+      $('#familyConnections').hidden=!selected;
+      if(!selected)return;
+      const r=this.family.relatives(selected.id,this.state.report),byName=(a,b)=>a.name.localeCompare(b.name);
+      $('#connectionName').textContent=selected.name;
+      $('#connectionTree').innerHTML=`<section class="connection-generation"><h4>Parents</h4>${r.parents.length?`<ul class="connection-row parent-row">${r.parents.sort(byName).map(p=>`<li>${this.connectionCard(p)}</li>`).join('')}</ul>`:'<p class="connection-unknown">Parent link not assigned in this report.</p>'}</section><div class="connection-center${r.parents.length?' has-parents':''}${r.children.length?' has-children':''}">${this.connectionCard(selected,true)}</div><section class="connection-generation"><h4>Children <span>(${r.children.length})</span></h4>${r.children.length?`<ul class="connection-row child-row">${r.children.sort(byName).map(p=>`<li>${this.connectionCard(p)}</li>`).join('')}</ul>`:'<p class="connection-unknown">No child links assigned in this report.</p>'}</section>`;
+    }
     person(p,tree=false) {
       const r=this.family.relatives(p.id,this.state.report);
-      const dates=p.restricted?'Details restricted':[p.birthYear,p.deathYear].filter(Boolean).join('–')||'Dates unrecorded';
-      const places=p.restricted?[]:p.places||[];
       return `<article class="${tree?'tree-person':'hive-cell'}${this.state.focus===p.id?' focused-person':''}">
-        <a class="person-link" data-profile-id="${esc(p.id)}" href="${esc(this.href({person:p.id}))}"><strong>${esc(p.name)}</strong><span>${esc(dates)}</span></a>
-        ${places[0]?`<a class="node-place" href="${esc(this.href({place:places[0],person:'',focus:''}))}">${esc(places[0])}</a>`:''}
+        <a class="person-link person-with-photo" data-profile-id="${esc(p.id)}" href="${esc(this.href({person:p.id}))}">${this.portrait(p)}<strong>${esc(p.name)}</strong></a>
+        ${this.vitals(p)}
         ${tree?`<div class="kinship">${r.parents.length?'Parent in report: '+r.parents.map(parent=>`<a href="${esc(this.href({focus:parent.id,generation:String(this.family.generation(parent.id,this.state.report)),person:''}))}">${esc(parent.name)}</a>`).join(' · '):this.family.generation(p.id,this.state.report)===1?'Report root':'Parent link unassigned'}</div>
         <button class="branch-button" data-tree-focus="${esc(p.id)}">Focus branch${r.children.length?' · '+r.children.length+' children':''}</button>`:''}
       </article>`;
@@ -56,6 +85,7 @@
       $('#archiveMode').value=s.view;$('#hiveGroup').value=s.group;
       $('#hiveGroupControl').hidden=s.view!=='hive';$('#treeControls').hidden=s.view!=='tree';
       $('#archiveExplorer').hidden=s.view==='list'||!matches.length;
+      $('#familyConnections').hidden=s.view!=='tree'||!matches.length;
       if(s.view==='list'||!matches.length)return null;
       $('#treeStage').hidden=s.view!=='tree';$('#hiveResults').hidden=s.view!=='hive';$('#treeNote').hidden=s.view!=='tree';
       if(s.view==='hive') {
@@ -79,6 +109,8 @@
       const selected=s.generation==='unknown'?null:Number(s.generation);
       if(!generations.includes(selected))s.generation=String(generations[0]??'unknown');
       const generation=s.generation==='unknown'?null:Number(s.generation),position=generations.indexOf(generation);
+      const selectedPerson=people.find(p=>p.id===s.focus)||people.filter(p=>this.family.generation(p.id,s.report)===generation).sort((a,b)=>a.name.localeCompare(b.name))[0];
+      this.connections(selectedPerson);
       $('#treeGeneration').innerHTML=generations.map(g=>`<option value="${g??'unknown'}">${g===null?'Generation unassigned':'Generation '+g}</option>`).join('');$('#treeGeneration').value=s.generation;
       $('#treeDepth').value=s.depth;
       $('#treeBreadcrumb').innerHTML=`<a href="${esc(this.href({focus:'',generation:''}))}">Whole report</a>${s.focus?` <span aria-hidden="true">/</span> <strong>${esc(this.family.people.get(s.focus)?.name)}</strong>`:''}`;

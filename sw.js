@@ -1,6 +1,6 @@
 /* Cache only the application shell. Private archive requests remain network-only. */
-const CACHE='living-wall-shell-v4';
-const FILES=['./','index.html','styles.css','archive.css','archive-explorer.css','archive-model.js','archive-explorer.js','app.js','search-engine.js','search-ui.js','data.js','manifest.webmanifest'];
+const CACHE='living-wall-shell-v5';
+const FILES=['./','index.html','styles.css','archive.css','archive-explorer.css','archive-model.js','profile-presentation.js','archive-explorer.js','app.js','search-engine.js','search-ui.js','data.js','manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('living-wall-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{

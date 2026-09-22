@@ -36,7 +36,9 @@
   }
   function dates(p) {
     if (p.restricted) return 'Details restricted';
-    return p.birthYear && p.deathYear ? `${p.birthYear}–${p.deathYear}` : p.birthYear ? `Born ${p.birthYear} (reported)` : p.deathYear ? `Died ${p.deathYear} (reported)` : 'Dates not recorded';
+    const d=window.ProfilePresentation.describe(p);
+    if(d.birthDate==='Not recorded'&&d.deathDate==='Not recorded')return 'Dates not recorded';
+    return `Born: ${d.birthDate} · Died: ${d.deathDate}`;
   }
   function setScope(next) {
     scope=next;

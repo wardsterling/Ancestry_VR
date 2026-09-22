@@ -33,6 +33,27 @@ perform identity matching, infer new relationships, or correct extraction errors
 
 ## Tree, hive, and permanent links
 
+The **Family connections** panel is a navigable tree of the selected person, recorded
+parents, and recorded children. Every card has a thumbnail slot, name, **DoB**, **PoB**,
+and **DoD**. Select a portrait/name to make that person the center; select Open profile
+to inspect evidence. Up/Down on a name moves to a reported parent/child. Wide families
+scroll horizontally, and every person/focus link supports reopening and browser history.
+The generation and hive cards show the same photo and life-event fields.
+
+Portraits use explicit stable-ID assignments to existing assets or an optional
+`portrait: {src: "assets/portraits/example.jpg"}` on a private profile. Missing or failed
+photos use labeled initials; restricted profiles show neither photos nor life details.
+No faces are generated or automatically matched. Two existing pilot portraits currently
+have archive-ID assignments.
+
+`profile-presentation.js` uses optional curator-supplied `birthDate`, `birthPlace`, and
+`deathDate` strings, or conservatively reads the named subject's report excerpt. It
+stops before spouse narratives, preserves approximate dates, and marks conflicts or
+unknown values. The old inferred birth/death years and general place arrays are not
+used as substitutes: they can contain relatives' events. A place is displayed as a
+birthplace only when explicitly attached to the subject's birth. Truncated or ambiguous
+excerpts can leave a field unrecorded even when another source could resolve it.
+
 The archive opens in **Family tree** view. Select a family report, bring a generation
 forward, then focus a person's branch to see that person's recorded ancestors and
 descendants. The foreground stays readable while adjacent generations recede in

@@ -154,6 +154,11 @@
         <button id="treeReset" class="secondary small">Reset focus</button>
       </div>
       <section id="archiveExplorer" aria-label="Family archive explorer" hidden>
+        <section id="familyConnections" class="family-connections" aria-labelledby="connectionTitle" hidden>
+          <header class="connection-header"><div><h3 id="connectionTitle">Family connections</h3><p id="connectionName" role="status"></p></div><p>Select a portrait or name to follow that person’s branch. On a keyboard, use ↑ for a parent or ↓ for a child.</p></header>
+          <div id="connectionTree" class="connection-tree" tabindex="0" role="region" aria-label="Navigable family tree; scroll sideways to see additional relatives"></div>
+          <p class="connection-note">DoB: date of birth · PoB: place of birth · DoD: date of death. Details come from the person’s report entry. Missing photographs and unrecorded facts are labeled. Relationships still need family review.</p>
+        </section>
         <div id="treeStage" class="tree-stage"><nav id="treeBreadcrumb" aria-label="Tree focus"></nav><div id="treeScene" class="tree-scene"></div></div>
         <p id="treeNote" class="search-help"></p>
         <div id="hiveResults" hidden></div>
@@ -178,6 +183,6 @@
   <dialog id="profileDialog" class="profile-dialog"><button class="dialog-close" aria-label="Close">×</button><div id="profileDialogContent"></div></dialog>
   <input id="importFile" type="file" accept="application/json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-explorer.js"></script><script src="search-ui.js"></script>
+  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="search-ui.js"></script>
 </body>
 </html>
