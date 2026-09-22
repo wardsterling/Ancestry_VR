@@ -66,7 +66,7 @@
   });
 
   $('#exportData').addEventListener('click', () => {
-    const payload = { app: 'The Living Family Wall', exportedAt: new Date().toISOString(), data: window.LFW_DATA, assignments: [{ personId: 'howard', xPercent: 57, yPercent: 42, status: 'family-confirmed' }] };
+    const payload = { app: 'The Living Family Wall', exportedAt: new Date().toISOString(), data: window.LFW_DATA, assignments: [{ personId: 'howard', xPercent: 57, yPercent: 42, status: 'needs-family-confirmation' }] };
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'})); a.download = 'living-family-wall-export.json'; a.click(); URL.revokeObjectURL(a.href); notify('Archive data exported.');
   });
   $('#importData').addEventListener('click', () => $('#importFile').click());

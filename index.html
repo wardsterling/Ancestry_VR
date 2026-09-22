@@ -47,7 +47,7 @@
             <button class="hotspot unassigned" style="left:22%;top:51%" data-unassigned aria-label="Unassigned photograph"><span>?</span></button>
           </div>
           <div class="stage-toolbar">
-            <span><i class="legend-dot confirmed"></i> Family confirmed</span>
+            <span><i class="legend-dot confirmed"></i> Pilot assignment—confirm</span>
             <span><i class="legend-dot unassigned"></i> Needs identification</span>
             <button id="searchPerson" class="text-button">Search by name</button>
           </div>
@@ -69,7 +69,7 @@
       <button class="back-button" data-nav="wall">← Back to wall</button>
       <div class="profile-hero card">
         <img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy, reproduced from page 9 of the Brimage descendant report">
-        <div class="profile-copy"><p class="eyebrow">Family-confirmed pilot profile</p><h1 id="profileName">Howard Pearson Kennedy</h1><p class="dates">1901–1978 · Physician · Educator</p>
+        <div class="profile-copy"><p class="eyebrow">Pilot profile · wall position needs confirmation</p><h1 id="profileName">Howard Pearson Kennedy</h1><p class="dates">1901–1978 · Worcester to Springfield</p>
           <p>This profile is built from a family descendant report. It is not a simulation of consciousness or recovered memory.</p>
           <div class="profile-actions"><button class="primary" id="beginConversation">Begin conversation</button><button class="secondary" id="viewTimeline">View timeline</button></div>
         </div>
@@ -115,7 +115,7 @@
     <section id="curatorView" class="view" aria-labelledby="curatorTitle">
       <div class="section-heading"><div><p class="eyebrow">Curator workspace</p><h1 id="curatorTitle">Register the family wall</h1></div><div><button class="secondary" id="importData">Import</button> <button class="primary" id="exportData">Export data</button></div></div>
       <div class="curator-grid">
-        <section class="card"><h2>Confirmed assignments</h2><div class="assignment"><img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy"><div><strong>Howard Pearson Kennedy</strong><small>Wall position: 57% × 42%</small><span class="status">Family confirmed</span></div><button class="icon-button" aria-label="Edit assignment">•••</button></div><button id="registerPhoto" class="secondary wide">+ Register another photograph</button></section>
+        <section class="card"><h2>Pilot assignments</h2><div class="assignment"><img src="assets/howard-kennedy.jpg" alt="Howard Pearson Kennedy"><div><strong>Howard Pearson Kennedy</strong><small>Proposed wall position: 57% × 42%</small><span class="status">Needs family confirmation</span></div><button class="icon-button" aria-label="Edit assignment">•••</button></div><button id="registerPhoto" class="secondary wide">+ Register another photograph</button></section>
         <section class="card"><h2>Review queue</h2><div class="review-row"><span class="review-count">2</span><p><strong>Unidentified wall photographs</strong><small>Assign a person or record as unknown</small></p></div><div class="review-row"><span class="review-count amber">2</span><p><strong>Evidence questions</strong><small>Education and marriage need primary records</small></p></div></section>
         <section class="card privacy"><h2>Privacy defaults</h2><label><input type="checkbox" checked disabled> Living people hidden from public view</label><label><input type="checkbox" checked disabled> Conversation respects item restrictions</label><label><input type="checkbox" checked disabled> Synthetic media clearly labeled</label><p class="muted compact">This MVP stores curator changes only in this browser. Export a backup before clearing browser data.</p></section>
       </div>
