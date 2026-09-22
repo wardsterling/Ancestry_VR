@@ -18,10 +18,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check code-only release
+        run: |
+          if git ls-files | grep -Eq '(^|/)archive-data\.json$|^dist/|\.(tar\.gz|pdf|pyc)$'; then
+            echo 'Private data or generated artifacts found in source. Publication stopped.'
+            exit 1
+          fi
+          node --test tests/*.test.js
+          node --check app.js
+          node --check search-ui.js
+          node scripts/build-static.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

@@ -6,8 +6,10 @@
   <meta name="theme-color" content="#172e2a">
   <meta name="description" content="An evidence-grounded, interactive family history wall.">
   <title>The Living Family Wall</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23172e2a'/%3E%3Cpath d='M18 46V18h7l7 16 7-16h7v28h-7V31l-7 15-7-15v15z' fill='%23f1ca86'/%3E%3C/svg%3E">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="archive.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -22,6 +24,15 @@
       <button class="nav-button" data-nav="curator">Curator</button>
     </nav>
     <button id="helpButton" class="icon-button" aria-label="Open help">?</button>
+    <form id="globalSearchForm" class="global-search search-widget" role="search" aria-label="Search the whole family archive">
+      <label for="globalSearch">Search the archive</label>
+      <div class="search-box">
+        <input id="globalSearch" role="combobox" type="text" autocomplete="off" spellcheck="false" maxlength="240" placeholder="Name, place, or year…" aria-autocomplete="list" aria-expanded="false" aria-controls="globalSuggestions" aria-describedby="globalSearchHint">
+        <button type="submit" class="primary small">Search</button>
+      </div>
+      <div id="globalSuggestions" class="autocomplete-panel" role="listbox" aria-label="Global search suggestions" hidden></div>
+      <span id="globalSearchHint" class="sr-only">Use up and down arrows to select a suggestion, Enter to open, Escape to close. Control or Command K focuses search.</span>
+    </form>
   </header>
 
   <main id="main">
@@ -104,12 +115,34 @@
     </section>
 
     <section id="archiveView" class="view" aria-labelledby="archiveTitle">
-      <div class="section-heading"><div><p class="eyebrow">Digital family archive</p><h1 id="archiveTitle">Sources, people, and connections</h1></div><button class="primary" id="addItem">+ Add archive item</button></div>
-      <div class="metrics"><div><strong>1</strong><span>Published source</span></div><div><strong>3</strong><span>Linked people</span></div><div><strong>1</strong><span>Wall assignment</span></div><div><strong>2</strong><span>Review questions</span></div></div>
-      <div class="archive-grid">
-        <article class="archive-item card"><img src="assets/brimage-report-page-9.jpg" alt="Page 9 of the Descendants of Minger Brimage report"><div><span class="status">Published for pilot</span><h2>Descendants of Minger Brimage</h2><p>Page 9 · Howard Pearson Kennedy, Marian Julia Hill, and Melvin Dow Kennedy</p><p class="metadata">Type: compiled descendant report<br>Created: April 7, 2008<br>Repository: family collection</p><button class="secondary evidence-trigger" data-evidence="report9">Open source page</button></div></article>
-        <section class="card workflow"><h2>Item readiness</h2><ol><li class="done">Original preserved</li><li class="done">People and source linked</li><li class="done">Transcription reviewed</li><li class="done">Privacy checked</li><li class="current">Corroborate with primary records</li></ol></section>
+      <div class="section-heading"><div><p class="eyebrow">Digital family archive</p><h1 id="archiveTitle">Find a person, place, or year</h1></div><button class="primary" id="addItem">+ Add archive item</button></div>
+      <div class="archive-search card search-widget">
+        <label for="archiveSearch">Search all descendant reports</label>
+        <div class="search-box"><input id="archiveSearch" role="combobox" type="text" maxlength="240" autocomplete="off" placeholder="Search in any word order, or use a year range" aria-controls="searchSuggestions" aria-autocomplete="list" aria-expanded="false" aria-describedby="archiveSearchHelp"><button id="clearSearch" class="text-button" type="button">Clear</button></div>
+        <div id="searchSuggestions" class="autocomplete-panel" role="listbox" aria-label="Archive suggestions" hidden></div>
+        <div class="search-scopes" role="group" aria-label="Search category"><button class="active" data-scope="all">All</button><button data-scope="name">Names</button><button data-scope="place">Places</button><button data-scope="date">Dates</button></div>
+        <p id="archiveSearchHelp" class="search-help">Combine names, places, and years. Use quotes for an exact phrase or a range such as 1850–1900. Dates are indexed by year, not day.</p>
+        <details id="advancedSearch"><summary>Refine results <span id="filterCount"></span></summary>
+          <div class="filter-grid">
+            <label>Name or nickname<input id="nameFilter" type="text" maxlength="100" placeholder="Any name order"></label>
+            <label>Place<input id="placeFilter" type="text" maxlength="100" list="placeOptions" placeholder="Town, state, or region"></label>
+            <datalist id="placeOptions"></datalist>
+            <label>Report<select id="sourceFilter"><option value="">All reports</option></select></label>
+            <label>Profile status<select id="statusFilter"><option value="">All profiles</option><option value="unrestricted">Details available</option><option value="restricted">Restricted details</option></select></label>
+            <label>Recorded year from<input id="yearFrom" type="number" min="1000" max="9999" inputmode="numeric" placeholder="e.g. 1800"></label>
+            <label>Recorded year to<input id="yearTo" type="number" min="1000" max="9999" inputmode="numeric" placeholder="e.g. 1950"></label>
+          </div>
+          <p class="search-help">Year filters match any recorded year, not a presumed lifespan. Restricted profiles are searchable by name and report only.</p>
+        </details>
+        <div class="search-options"><label><input id="fuzzySearch" type="checkbox" checked> Allow minor spelling errors</label><button id="resetFilters" class="text-button">Reset all search tools</button></div>
+        <div id="activeFilters" class="filter-chips" aria-label="Active filters"></div>
+        <p id="searchValidation" class="search-error" role="alert" hidden></p>
       </div>
+      <div class="metrics"><div><strong id="profileMetric">—</strong><span>Profiles</span></div><div><strong id="placeMetric">—</strong><span>Historical places</span></div><div><strong>4</strong><span>Descendant reports</span></div><div><strong id="restrictedMetric">—</strong><span>Privacy-restricted</span></div></div>
+      <div class="results-heading"><div><h2 id="resultTitle">Browse all profiles</h2><p id="resultSummary" class="muted" role="status">Loading the family archive…</p></div><label>Sort <select id="resultSort"><option value="relevance">Best match</option><option value="name">Name A–Z</option><option value="oldest">Earliest birth</option><option value="sources">Most source locations</option></select></label></div>
+      <div id="archiveResults" class="profile-results" aria-live="polite"></div>
+      <button id="loadMore" class="secondary load-more" hidden>Show more profiles</button>
+      <section class="source-collections"><h2>Source collections</h2><div class="source-grid"><article class="card"><strong>Brimage–Gatling</strong><span>40-page report · 2008</span></article><article class="card"><strong>Thomas Pinn</strong><span>110-page report · 2016</span></article><article class="card"><strong>Edward Turner</strong><span>87-page report · 2016</span></article><article class="card"><strong>Patrick Lee</strong><span>91-page report · 2016</span></article></div></section>
     </section>
 
     <section id="curatorView" class="view" aria-labelledby="curatorTitle">
@@ -124,8 +157,9 @@
 
   <dialog id="evidenceDialog"><button class="dialog-close" aria-label="Close">×</button><p class="eyebrow">Supporting source</p><h2>Descendants of Minger Brimage · page 9</h2><p class="source-note">Compiled family report created April 7, 2008. A report statement is evidence of what the compiler recorded—not automatic proof that every claim is correct.</p><img src="assets/brimage-report-page-9.jpg" alt="Full page 9 showing entries for Howard Pearson Kennedy, Marian Julia Hill, and Melvin Dow Kennedy"><div class="citation"><strong>Citation</strong><p><em>Descendants of Minger Brimage</em>, RootsMagic report, 7 April 2008, p. 9; family collection.</p></div></dialog>
   <dialog id="genericDialog"><button class="dialog-close" aria-label="Close">×</button><div id="genericDialogContent"></div></dialog>
+  <dialog id="profileDialog" class="profile-dialog"><button class="dialog-close" aria-label="Close">×</button><div id="profileDialogContent"></div></dialog>
   <input id="importFile" type="file" accept="application/json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="data.js"></script><script src="app.js"></script>
+  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="search-ui.js"></script>
 </body>
 </html>

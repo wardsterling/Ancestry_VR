@@ -7,6 +7,7 @@
 
   function showView(name) {
     const id = `${name}View`;
+    if (!views.some(v => v.id === id)) return showView('wall');
     views.forEach(v => v.classList.toggle('active', v.id === id));
     $$('.nav-button').forEach(b => b.classList.toggle('active', b.dataset.nav === name));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -37,7 +38,7 @@
   $('#modeInfo').addEventListener('click', () => openGeneric('Guide mode—not impersonation', '<p>The guide speaks <strong>about</strong> Howard using approved evidence. It does not claim to be Howard or to possess his memories.</p><p>A future first-person interpretation would require family approval and explicit reconstruction labels.</p>'));
   $('#addItem').addEventListener('click', () => openGeneric('Archive intake preview', '<p>The production workflow will capture an original, description, people, date, place, rights, privacy, evidence status, physical location, and unresolved questions.</p><button class="primary" onclick="this.closest(\'dialog\').close()">Got it</button>'));
   $('#registerPhoto').addEventListener('click', () => openGeneric('Register a wall photograph', '<p>In the production workflow, draw a box around a frame, search for a person, and require a second confirmation before publishing the match.</p><p><strong>This prototype deliberately does not perform automatic face recognition.</strong></p>'));
-  $('#searchPerson').addEventListener('click', () => openGeneric('Find a family member', '<label for="personSearch">Name</label><input id="personSearch" value="Howard Pearson Kennedy"><button class="primary" id="searchHoward">Open profile</button>'));
+  $('#searchPerson').addEventListener('click', () => { showView('archive'); $('#archiveSearch').focus(); });
   $('#genericDialog').addEventListener('click', e => { if (e.target.id === 'searchHoward') { $('#genericDialog').close(); showView('profile'); } });
   $('#viewTimeline').addEventListener('click', () => openGeneric('Howard’s documented timeline', '<div class="timeline"><p><b>1901</b> Born in Worcester, Massachusetts</p><p><b>1924</b> B.A., Howard University (reported)</p><p><b>1925</b> Married Marian Julia Hill (reported)</p><p><b>1930</b> M.D., Meharry Medical College (reported)</p><p><b>1978</b> Died in Springfield, Massachusetts</p></div>'));
 
@@ -58,7 +59,7 @@
   $$('.suggestions button').forEach(b => b.addEventListener('click', () => ask(b.textContent)));
 
   $('#cameraMode').addEventListener('click', () => { $('#cameraMode').classList.add('active'); $('#wallMode').classList.remove('active'); $('#cameraNotice').classList.remove('hidden'); $('#wallCanvas').classList.add('camera-overlay'); });
-  $('#wallMode').addEventListener('click', () => { $('#wallMode').classList.add('active'); $('#cameraMode').classList.remove('active'); $('#cameraNotice').classList.add('hidden'); $('#wallCanvas').classList.remove('camera-overlay'); $('#cameraFeed').classList.add('hidden'); if (stream) stream.getTracks().forEach(t => t.stop()); });
+  $('#wallMode').addEventListener('click', () => { $('#wallMode').classList.add('active'); $('#cameraMode').classList.remove('active'); $('#cameraNotice').classList.add('hidden'); $('#wallCanvas').classList.remove('camera-overlay', 'hidden'); $('#cameraFeed').classList.add('hidden'); if (stream) stream.getTracks().forEach(t => t.stop()); });
   $('#startCamera').addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia) return notify('Camera access is unavailable in this browser. Wall photo mode still works.');
     try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); $('#cameraFeed').srcObject = stream; $('#cameraFeed').classList.remove('hidden'); $('#wallCanvas').classList.add('hidden'); $('#cameraStatus').textContent = 'Camera is live. Automatic recognition is not enabled in this privacy-first MVP.'; }
@@ -72,6 +73,8 @@
   $('#importData').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', async e => { try { const j = JSON.parse(await e.target.files[0].text()); notify(j.app === 'The Living Family Wall' ? 'Valid backup read. Import preview complete.' : 'That file is not a Living Family Wall export.'); } catch { notify('The selected file is not valid JSON.'); } });
 
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js');
+  window.LFW = { showView, notify };
+
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   showView(location.hash.slice(1) || 'wall');
 })();

@@ -1,2 +1,13 @@
 .DS_Store
 *.log
+archive-data.json
+dist/
+upload/
+output/
+*.pdf
+*.tar.gz
+*.zip
+__pycache__/
+*.pyc
+.env*
+.sites-runtime/

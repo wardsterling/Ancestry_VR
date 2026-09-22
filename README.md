@@ -1,59 +1,99 @@
-# The Living Family Wall — MVP
+# The Living Family Wall
 
-An executable, privacy-first prototype for exploring a physical family picture wall and conversing with an evidence-grounded family-history guide.
+Static web MVP with a global, browser-local family archive search.
 
-## What the MVP demonstrates
+## Public code / private data
 
-- Explore the Ward Family picture wall using family-confirmed hotspots.
-- Open Howard Pearson Kennedy’s pilot profile with report-derived facts.
-- Ask a local, deterministic guide common questions without invented answers.
-- Open the report page behind substantive biographical claims.
-- Browse a minimal archive and source-readiness workflow.
-- Preview curator controls for identity assignments and privacy.
-- Export a portable JSON backup and validate an imported backup.
-- Use a live device camera preview when the browser grants permission.
-- Install and revisit the progressive web app offline after its first load.
+The expanded archive is **not** part of this public repository. Supply `archive-data.json`
+only to an owner-private deployment. Its absence produces a clear empty state, not
+a broken application. Existing pilot content and previously published assets remain
+unchanged; a code-only update does not remove them from Git history.
 
-The MVP does **not** perform facial recognition, impersonate an ancestor, call a generative-AI service, upload family data, or connect to Ancestry/FamilySearch. Those require a reviewed backend, permissions, and current provider agreements.
+Never push `archive-data.json`, `dist/`, source reports, screenshots of family data,
+deployment archives, credentials, or Python caches to public GitHub. The ignore rules
+are a safeguard, not a substitute for reviewing staged files.
 
-## Run locally
+## Search
 
-No build step or dependencies are required.
+- Global search in the app header on every main view; Control/Command K focuses it.
+- Autocomplete for people, places, years, and reports. Arrow keys select; Enter opens;
+  Escape dismisses. Person suggestions open the matching archive profile.
+- Names in any word order, recorded aliases/nicknames, accent-insensitive matching,
+  and optional one-edit spelling tolerance. Approximate results are labeled.
+- Quoted phrases for exact contiguous words; numeric years never fuzzy-match.
+- Combined name, place, report, profile-status, and inclusive year-range filters.
+- State abbreviations and full state names match places.
+- Sorting by relevance, name, earliest reported birth, or source-location count.
+- Removable filter chips, clear/reset, incremental result loading, and retry states.
 
-```bash
+Dates currently mean **recorded years**, not day-level dates or inferred lifespans.
+The search indexes profile names/aliases, allowed places/years, and source titles;
+it does not index arbitrary raw report narratives. Search does not verify genealogy,
+perform identity matching, infer new relationships, or correct extraction errors.
+
+## Run and test
+
+No browser runtime dependencies or paid services are required.
+
+```sh
 python3 -m http.server 8080
+node --test tests/*.test.js
 ```
 
-Open `http://localhost:8080`. Camera permission generally requires `localhost` or HTTPS.
+Open `http://localhost:8080`. Camera preview needs HTTPS or localhost and user permission.
+To package the static files, run `node scripts/build-static.mjs`. The script copies the
+locally supplied archive only if present, so never publish a private `dist/` publicly.
+The GitHub Pages workflow tests the code and rejects a tracked private dataset.
 
-## Evidence boundaries
+## Private archive format
 
-Pilot data comes from *Descendants of Minger Brimage*, a RootsMagic report dated April 7, 2008, page 9. This compiled report is treated as a source, not automatic proof. Primary records and the report’s underlying citations should be added during the next archive phase.
+```json
+{
+  "profiles": [{
+    "id": "stable-id",
+    "name": "Display name",
+    "aliases": [],
+    "birthYear": null,
+    "deathYear": null,
+    "years": [],
+    "places": [],
+    "facts": [],
+    "restricted": true,
+    "sources": [{"reportId": "source-id", "title": "Report title", "page": 1}]
+  }]
+}
+```
 
-The wall-position assignment for Howard is a demonstrative pilot marker and must be confirmed by the family before it is treated as authoritative.
+These are schema placeholders, not example family records. `scripts/build_archive.py`
+is the existing PDF extraction utility (requires pdfplumber). It is a draft extraction
+pipeline, not a completeness guarantee: same-name merges, page attribution, birth/death
+attribution, living-status inference, and narratives require curator review.
 
-## Suggested production architecture
+## Security and limitations
 
-1. Object storage for immutable originals and linked derivatives.
-2. PostgreSQL plus a relationship model for people, sources, events, places, wall positions, permissions, and claims.
-3. Search and retrieval that filters by access before sending approved excerpts to an AI model.
-4. Structured answers with claim-level citations and explicit uncertainty.
-5. Passwordless family accounts, roles, audit logs, backups, and full export.
-6. Optional AR image anchors after manual registration; no unrestricted face identification.
+The private Sites deployment's owner-only access protects the collection. The static
+app's `restricted` field hides a profile's details from search and display; it is not
+server-side person-level authorization. All allowed Site viewers can retrieve its data
+file. Other profiles' imported narratives may mention living relatives. Keep the full
+collection owner-private until it has been reviewed or a server-side policy is added.
 
-## Repository layout
+Queries are processed locally with no external search service, analytics, or stored
+search history. The service worker removes the older archive caches and only caches
+the app shell; archive requests are network-only. Offline access to family records is
+therefore intentionally unavailable.
 
-- `index.html` — accessible single-page interface
-- `styles.css` — responsive visual system
-- `data.js` — small reviewed pilot dataset and bounded answers
-- `app.js` — navigation, conversation, camera preview, evidence, import/export
-- `assets/` — family wall, source page, and source-derived portraits
-- `.github/workflows/pages.yml` — GitHub Pages deployment
+The existing guide is a small deterministic pilot, not a general conversational AI.
+Archive intake, wall-registration editing, and backup import are still previews.
+Source labels point to the supplied reports and do not establish independent proof.
 
-## Privacy
+## Files
 
-This version is fully static. It sends no archive or conversation content to a server. Curator changes are demonstrative; exported JSON is the portable backup mechanism.
+- `search-engine.js`: data-independent indexing, matching, suggestions, and filters
+- `search-ui.js`: global combobox, archive results, and profile dialogs
+- `archive.css`: responsive search styling
+- `app.js`, `index.html`, `styles.css`: existing app and pilot interface
+- `tests/`: synthetic-only regression checks
+- `scripts/build-static.mjs`: explicit static package preparation
 
-## Rights
-
-Family photographs and report reproductions remain part of the Ward family collection. Confirm rights and privacy before broad public distribution.
+Family collection material retains its existing rights. Confirm permission before
+publishing additional records or media.
