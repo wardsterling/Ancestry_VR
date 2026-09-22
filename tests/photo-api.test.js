@@ -22,3 +22,15 @@ test('photo API requires authenticated same-origin writes and validates confirma
  const p={...record(),claims:[{id:'claim1',profileId:'example-person',label:'',status:'confirmed',evidenceIds:[]}]};
  assert.equal((await handleResearch(request('PUT','owner',p),env,catalog)).status,400);
 });
+test('saved notebook identities follow unique archive merges without losing citations or revision protection',async()=>{
+ const {handleResearch}=await import('../worker/index.mjs'),env={DB:storage()};
+ const before={profileIds:['old-one','old-two'],documents:catalog.documents};
+ const item={...record(),evidence:[{id:'e1',kind:'report',reportId:'report',page:2,note:'Printed caption'}],claims:[{id:'c1',profileId:'old-one',label:'',status:'proposed',evidenceIds:['e1']},{id:'c2',profileId:'old-two',label:'',status:'confirmed',evidenceIds:['e1']}]};
+ assert.equal((await handleResearch(request('PUT','owner',item),env,before)).status,200);
+ const after={...catalog,profileAliases:{'old-one':{targets:['example-person']},'old-two':{targets:['example-person']}}};
+ const result=await (await handleResearch(request(),env,after)).json(),p=result.records[0];
+ assert.equal(p.revision,1);assert.equal(p.claims.length,1);assert.equal(p.claims[0].profileId,'example-person');assert.equal(p.claims[0].status,'confirmed');assert.deepEqual(p.claims[0].evidenceIds,['e1']);assert.equal(p.evidence[0].page,2);
+ assert.equal((await handleResearch(request('PUT','owner',p),env,after)).status,200);
+ const ambiguous={...after,profileAliases:{'old-one':{targets:['example-person','other-person']}}};
+ assert.throws(()=>PhotoResearch.validate(item,ambiguous),/profile is unavailable/);
+});

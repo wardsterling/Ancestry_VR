@@ -7,7 +7,7 @@ if(manifest.static||manifest.d1!=='DB')throw Error('Sites photo research require
 await rm('dist',{recursive:true,force:true});
 execFileSync(process.execPath,['scripts/build-static.mjs','--site'],{stdio:'inherit'});
 const archive=JSON.parse(await readFile('archive-data.json','utf8'));
-const references={documents:archive.documents.map(({id,pages})=>({id,pages})),profileIds:archive.profiles.map(p=>p.id)};
+const references={documents:archive.documents.map(({id,pages})=>({id,pages})),profileIds:archive.profiles.map(p=>p.id),profileAliases:archive.idAliases||{}};
 const rules=await readFile('photo-research.js','utf8');
 const worker=(await readFile('worker/index.mjs','utf8')).replace("import '../photo-research.js';",'');
 await mkdir('dist/server',{recursive:true});await mkdir('dist/.openai',{recursive:true});

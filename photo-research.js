@@ -9,7 +9,33 @@
     const [x,y,w,h]=value;if(x<0||y<0||w<.1||h<.1||x+w>100.001||y+h>100.001)throw Error('Keep the photograph box inside the image.');
     return value.map(n=>Math.round(n*10000)/10000);
   }
+  function redirectReferences(input,catalog={}){
+    if(!input||typeof input!=='object')return input;
+    const resolve=id=>{
+      const seen=new Set();let next=id;
+      while(next&&!catalog.profileIds?.includes(next)&&!seen.has(next)){
+        seen.add(next);const targets=catalog.profileAliases?.[next]?.targets;
+        if(!Array.isArray(targets)||targets.length!==1)break;next=targets[0];
+      }
+      return catalog.profileIds?.includes(next)?next:id;
+    };
+    const value={...input};
+    if(Array.isArray(input.evidence))value.evidence=input.evidence.map(e=>e?.kind==='archive'?{...e,profileId:resolve(e.profileId)}:{...e});
+    if(Array.isArray(input.claims)){
+      const active=new Map();value.claims=[];
+      for(const c of input.claims){
+        const claim={...c,profileId:resolve(c?.profileId),evidenceIds:Array.isArray(c?.evidenceIds)?[...c.evidenceIds]:c?.evidenceIds};
+        const existing=claim.status!=='rejected'&&claim.profileId&&active.get(claim.profileId);
+        if(existing&&['proposed','confirmed'].includes(claim.status)&&Array.isArray(existing.evidenceIds)&&Array.isArray(claim.evidenceIds)&&(claim.status!=='confirmed'||claim.evidenceIds.length)&&(existing.status!=='confirmed'||existing.evidenceIds.length)){
+          existing.evidenceIds=[...new Set([...existing.evidenceIds,...claim.evidenceIds])];
+          if(claim.status==='confirmed')existing.status='confirmed';
+        }else{value.claims.push(claim);if(claim.status!=='rejected'&&claim.profileId)active.set(claim.profileId,claim);}
+      }
+    }
+    return value;
+  }
   function validate(input,catalog={}){
+    input=redirectReferences(input,catalog);
     if(!input||!idPattern.test(input.id))throw Error('Invalid photograph ID.');
     if(!['wall','report'].includes(input.kind))throw Error('Choose a wall photograph or report photograph.');
     const checkProfile=id=>{if(id&&(!idPattern.test(id)||(catalog.profileIds&&!catalog.profileIds.includes(id))))throw Error('That archive profile is unavailable.');return id;};
@@ -39,6 +65,19 @@
     if(new Set(claims.map(c=>c.id)).size!==claims.length)throw Error('Duplicate claim IDs.');
     return {id:input.id,kind:input.kind,title:clean(input.title,160)||'Unidentified photograph',rect:rectangle(input.rect),...(input.kind==='report'?{reportId:input.reportId,page:input.page}:{}),notes:clean(input.notes,4000),unidentifiedPeople:input.unidentifiedPeople===true,claims,evidence};
   }
+  function connectSourcePerson(photo,person,source,note,ids,catalog={}){
+    if(!person?.id||!source||(person.sources||[]).every(s=>s.reportId!==source.id||s.page!==source.page))throw Error('Choose a person cited on this source page.');
+    const explanation=clean(note);if(!explanation)throw Error('Explain why this source person may be in the photograph.');
+    // Work on a copy: failed validation must leave the curator’s existing draft intact.
+    const value=validate(photo,catalog);
+    let claim=value.claims.find(c=>c.profileId===person.id&&c.status!=='rejected');
+    if(!claim){claim={id:ids.claimId,profileId:person.id,label:'',status:'proposed',evidenceIds:[]};value.claims.push(claim);}
+    const citationNote=clean(person.name+' — '+explanation);
+    let evidence=value.evidence.find(e=>e.kind==='report'&&e.reportId===source.id&&e.page===source.page&&e.note===citationNote);
+    if(!evidence){evidence={id:ids.evidenceId,kind:'report',reportId:source.id,page:source.page,note:citationNote,attribution:''};value.evidence.push(evidence);}
+    claim.evidenceIds=[...new Set([...claim.evidenceIds,evidence.id])];
+    return {...validate(value,catalog),revision:photo.revision||0};
+  }
   function status(photo){return photo.claims?.some(c=>c.status==='confirmed')?(photo.unidentifiedPeople?'partly identified':'confirmed'):photo.claims?.some(c=>c.status==='proposed')?'proposed':'unidentified';}
   function cropStyle(rect){const [x,y,w,h]=rectangle(rect);return `aspect-ratio:${w}/${h};background-size:${10000/w}% ${10000/h}%;background-position:${w===100?0:x/(100-w)*100}% ${h===100?0:y/(100-h)*100}%`;}
   function fromPoints(a,b){const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y);return rectangle([x,y,Math.abs(a.x-b.x),Math.abs(a.y-b.y)]);}
@@ -57,5 +96,5 @@
     const groups=new Map();for(const {key,profile} of rows){if(!groups.has(key))groups.set(key,[]);groups.get(key).push(profile);}
     return [...groups].sort(([a],[b])=>a.localeCompare(b,undefined,{numeric:true})).map(([label,people])=>({label,people:people.sort((a,b)=>sort==='oldest'?((a.birthYear||9999)-(b.birthYear||9999))||a.name.localeCompare(b.name):sort==='surname'?a.name.split(' ').at(-1).localeCompare(b.name.split(' ').at(-1))||a.name.localeCompare(b.name):a.name.localeCompare(b.name))}));
   }
-  return {validate,rectangle,fromPoints,safeUrl,status,cropStyle,groupPortraits};
+  return {validate,rectangle,fromPoints,safeUrl,status,cropStyle,groupPortraits,connectSourcePerson,redirectReferences};
 });

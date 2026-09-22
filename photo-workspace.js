@@ -7,7 +7,8 @@
   const app=()=>window.ArchiveApp;
   const records=new Map(),drafts=new Map();
   let selected=null,ready=false,dirty=false,saving=false,unknownLimit=16,sourceDrawing=false,wallDrawing=false,firstPoint=null,scale=1,sourceDoc=null,selectedTreePerson=null;
-  const catalog=()=>({documents:app()?.documents||[],profileIds:(app()?.profiles||[]).map(p=>p.id)});
+  let connectionPhoto=null,sourcePerson=null,sourceChoiceIds=null,peopleLimit=30,sourceMap=null,sourceMapState='idle';
+  const catalog=()=>({documents:app()?.documents||[],profileIds:(app()?.profiles||[]).map(p=>p.id),profileAliases:app()?.profileAliases||{}});
   const current=()=>drafts.get(selected)||records.get(selected);
   const profile=id=>app()?.profiles.find(p=>p.id===id);
   const restricted=photo=>!app()?.showLiving&&(photo?.claims||[]).some(c=>c.status!=='rejected'&&profile(c.profileId)?.restricted);
@@ -42,7 +43,7 @@
     const scope=$('#unknownPortraitSource').value||'all';
     const photos=[...records.values()].filter(p=>photoStatus(p)!=='confirmed'&&(scope==='all'||scope===p.kind)&&!restricted(p));
     $('#unknownPortraitSummary').textContent=photos.length+' photographs awaiting evidence or confirmation';
-    $('#unknownPortraits').innerHTML=photos.slice(0,unknownLimit).map(p=>`<article class="unidentified-card"><button data-photo-id="${esc(p.id)}">${crop(p)}<strong>${esc(p.title)}</strong><small>${p.kind==='wall'?'Wall photograph':'Report · page '+p.page} · ${photoStatus(p)}</small></button></article>`).join('')||'<p>No unidentified photographs in this selection. Use “Mark unidentified portrait” on any report page to add one.</p>';
+    $('#unknownPortraits').innerHTML=photos.slice(0,unknownLimit).map(p=>`<article class="unidentified-card"><button data-photo-id="${esc(p.id)}">${crop(p)}<strong>${esc(p.title)}</strong><small>${p.kind==='wall'?'Wall photograph':'Report · page '+p.page} · ${photoStatus(p)}</small></button><button class="connect-source-button" data-connect-source-photo="${esc(p.id)}">Connect to source person →</button></article>`).join('')||'<p>No unidentified photographs in this selection. Use “Mark unidentified portrait” on any report page to add one.</p>';
     $('#moreUnknownPortraits').hidden=photos.length<=unknownLimit;
   }
   function renderCandidates(){
@@ -61,6 +62,7 @@
     $('#photoResearchEditor').hidden=false;$('#photoResearchEmpty').hidden=true;$('#closePhotoNotebook').hidden=false;
     $('#photoNotebookTitle').textContent=p.title||'Photograph';$('#photoCrop').outerHTML=`<div id="photoCrop">${crop(p)}</div>`;
     const hidden=restricted(p);
+    $('#connectPhotoSource').disabled=hidden||saving;
     $('#photoLabel').value=p.title;$('#photoNotes').value=hidden?'':p.notes;$('#photoUnidentifiedPeople').checked=!!p.unidentifiedPeople;$('#photoOrigin').innerHTML=p.kind==='report'?sourceLink(p.reportId,p.page,'View photograph on original source page'):'Original: family wall photograph';
     ['photoLabel','photoNotes','photoUnidentifiedPeople','photoX','photoY','photoW','photoH','savePhotoResearch','addPossiblePerson','addPhotoEvidence'].forEach(id=>$('#'+id).disabled=hidden);
     ['photoX','photoY','photoW','photoH'].forEach((id,i)=>$('#'+id).value=p.rect[i]);
@@ -73,6 +75,7 @@
     if(saving){notify('Please wait for this photograph to finish saving.');return;}
     if(!records.has(id)&&!drafts.has(id)){if(ready)notify('This photograph is not in your notebook.');return;}
     allowLeave();selected=id;dirty=drafts.has(id)&&JSON.stringify(drafts.get(id))!==JSON.stringify(records.get(id));if(!drafts.has(id))drafts.set(id,structuredClone(records.get(id)));
+    if(connectionPhoto&&connectionPhoto!==id){connectionPhoto=null;sourcePerson=null;}
     window.LFW.showView('wall',false);if(push)history.pushState(null,'',linkFor(current()));
     renderEditor();renderRegions();
     if(window.innerWidth<1100)$('#photoNotebook').scrollIntoView({behavior:'smooth',block:'start'});
@@ -137,7 +140,79 @@
   $('#sourcePageCanvas').addEventListener('pointermove',e=>{if(sourceDrawing&&firstPoint)drawBox('sourceDraftRect',firstPoint,localPoint(e,$('#sourcePageCanvas')));});
   $('#addWallPhoto').addEventListener('click',startWallDrawing);
   $('#markSourcePhoto').addEventListener('click',()=>{if(sourceDrawing){cancelDrawing();return;}cancelDrawing();sourceDoc=app()?.currentSource;if(!sourceDoc?.pageImage)return;sourceDrawing=true;$('#sourcePageCanvas').classList.add('is-drawing');$('#markSourcePhoto').textContent='Cancel marking';$('#sourcePageStatus').textContent='Tap two opposite corners around the portrait, then enter what you know.';});
-  function sourceChanged(doc){cancelDrawing();sourceDoc=doc;$('#citeSourcePhoto').hidden=!selected;}
+  function clearSourceChoice(){sourcePerson=null;sourceChoiceIds=null;$('#sourceConnectionNote').value='';$('#sourceConnectionStatus').textContent='';$('#sourcePersonReview').hidden=true;}
+  async function loadSourceMap(){
+    if(sourceMapState!=='idle')return;sourceMapState='loading';
+    try{const response=await fetch('source-people.json',{cache:'no-store'});if(!response.ok)throw Error();sourceMap=await response.json();sourceMapState='ready';}
+    catch{sourceMapState='unavailable';}
+    renderSourcePeople();
+  }
+  function renderSourceContext(){
+    const p=connectionPhoto&&(drafts.get(connectionPhoto)||records.get(connectionPhoto));
+    $('#sourceConnectionContext').hidden=!p;
+    $('#sourceConnectionContext').innerHTML=p?`<div class="source-connection-thumb">${crop(p)}</div><div><strong>Connect: ${esc(p.title)}</strong><p>Choose a person named in the source, then explain the evidence for this photograph.</p><button class="secondary" data-return-photo="${esc(p.id)}">Return to photograph</button> <button class="text-button" data-end-connection="true">Stop connecting</button></div>`:'';
+  }
+  function renderSourcePeople(){
+    if(!sourceDoc)return;
+    renderSourceContext();
+    $('#sourcePeopleReport').innerHTML=reportOptions();$('#sourcePeopleReport').value=sourceDoc.id;
+    let rows=window.SourceDocuments.people(app()?.profiles||[],sourceDoc,{scope:$('#sourcePeopleScope').value||'page',query:$('#sourcePeopleSearch').value});
+    if(sourceChoiceIds)rows=rows.filter(row=>sourceChoiceIds.includes(row.person.id));
+    $('#sourcePeopleSummary').textContent=sourceChoiceIds?'This printed name has '+rows.length+' source records. Choose the correct person; no identity has been assigned.':rows.length+' cited '+(rows.length===1?'person entry':'person entries')+($('#sourcePeopleScope').value==='report'?' in this report':' on this page');
+    $('#sourcePeopleList').innerHTML=rows.slice(0,peopleLimit).map(({person:p,page})=>`<article class="source-person-row"><button data-source-person="${esc(p.id)}" data-person-report="${esc(sourceDoc.id)}" data-person-page="${page}"><strong>${esc(p.name)}</strong><small>${p.restricted?'Living-person details hidden':esc([p.birthDate?'Born '+p.birthDate:'',p.deathDate?'Died '+p.deathDate:'',p.birthPlace].filter(Boolean).join(' · ')||'Dates and place not recorded')}</small><small>Page ${page} · ${esc(p.recordType||'Cited archive entry')} · ${esc(p.id)}</small></button><a href="#archive?person=${esc(p.id)}" data-profile-id="${esc(p.id)}">View tree</a></article>`).join('')||'<p>No cited people match. Try the whole report, another page, or a different spelling.</p>';
+    $('#sourcePeopleMore').hidden=rows.length<=peopleLimit;
+    const highlights=window.SourceDocuments.highlights(sourceMap,app()?.profiles||[],sourceDoc,app()?.snapshotId);
+    $('#sourcePersonHotspots').hidden=!$('#sourcePeopleMarkers').checked;
+    $('#sourcePersonHotspots').innerHTML=highlights.map(h=>{const [x,y,w,height]=h.rect;const label=h.profileIds.map(id=>profile(id)?.name).filter(Boolean).join(' / ');return `<button class="source-name-hotspot" style="left:${x}%;top:${y}%;width:${w}%;height:${height}%" data-source-person-ids="${esc(h.profileIds.join(' '))}" aria-label="Review ${esc(label)}${h.profileIds.length>1?' — choose a source identity':''}" title="${esc(label)}"></button>`;}).join('');
+    $('#sourcePeopleHint').textContent=highlights.length?'Tap a highlighted printed name or choose from the list. Matching names with multiple records require a choice.':sourceMapState==='loading'?'Loading name highlights. You can already choose people from the cited-record list.':'Choose from the cited-record list. No verified name highlights are available on this page.';
+    renderSourceReview();
+  }
+  function renderSourceReview(){
+    const person=sourcePerson&&profile(sourcePerson.id),p=connectionPhoto&&(drafts.get(connectionPhoto)||records.get(connectionPhoto));
+    $('#sourcePersonReview').hidden=!person;if(!person)return;
+    $('#sourcePersonReviewTitle').textContent=person.name;
+    const blocked=person.restricted&&!app()?.showLiving||p&&restricted(p);
+    $('#sourcePersonDetails').innerHTML=`<p>${sourceLink(sourcePerson.reportId,sourcePerson.page)} · <a href="#archive?person=${esc(person.id)}" data-profile-id="${esc(person.id)}">View person in family tree</a></p>`+(blocked?'<p class="privacy-panel">Turn on “Show living-person details” in the archive to connect this person.</p>':!p?`<p><a href="#wall?unidentified=1">Choose an unidentified photograph</a>${selected?` or <button class="text-button" data-connect-source-photo="${esc(selected)}">connect your selected photograph</button>`:''}.</p>`:'');
+    $('#sourceConnectionForm').hidden=!p||blocked;
+    $('#saveSourceConnection').disabled=saving||blocked;
+    $('#sourceConnectionNote').disabled=saving;
+  }
+  function beginSourceConnection(id){
+    if(saving)return;
+    selectPhoto(id,false);if(selected!==id||!current())return;
+    if(restricted(current())){message('Turn on living-person details to connect this photograph.',true);return;}
+    connectionPhoto=id;clearSourceChoice();peopleLimit=30;$('#sourcePeopleSearch').value='';$('#sourcePeopleScope').value='page';
+    const p=current(),doc=p.kind==='report'?window.SourceDocuments.source(app()?.documents||[],p.reportId,p.page):app()?.currentSource||window.SourceDocuments.source(app()?.documents||[],app()?.documents[0]?.id,1);
+    if(!doc){notify('No source documents are connected to this archive.');return;}
+    app().openSource(doc.id,doc.page);
+  }
+  function chooseSourcePerson(id,reportId,page){
+    if(saving)return;
+    const person=profile(id),doc=window.SourceDocuments.source(app()?.documents||[],reportId,Number(page));
+    if(!person||!doc||doc.page!==Number(page)||!window.SourceDocuments.people([person],doc).length)return;
+    if(sourceDoc?.id!==doc.id||sourceDoc?.page!==doc.page)app().openSource(doc.id,doc.page);
+    sourcePerson={id,reportId:doc.id,page:doc.page};$('#sourceConnectionNote').value='';$('#sourceConnectionStatus').textContent='';renderSourceReview();$('#sourcePersonReviewTitle').focus({preventScroll:true});$('#sourcePersonReview').scrollIntoView({block:'nearest',behavior:'smooth'});
+  }
+  async function saveSourceConnection(){
+    if(saving||!sourcePerson||connectionPhoto!==selected||!current())return;
+    const person=profile(sourcePerson.id),doc=app()?.currentSource;
+    if(!person||!doc||doc.id!==sourcePerson.reportId||doc.page!==sourcePerson.page)return;
+    if(restricted(current())||person.restricted&&!app()?.showLiving)return;
+    pullFields();
+    try{const value=rules.connectSourcePerson(current(),person,doc,$('#sourceConnectionNote').value,{claimId:uid('claim'),evidenceId:uid('evidence')},catalog());drafts.set(selected,value);markDirty();renderEditor();}
+    catch(error){$('#sourceConnectionStatus').textContent=error.message;return;}
+    $('#sourceConnectionStatus').textContent='Saving connection and page citation…';
+    const pending=sourcePerson,photoId=selected,promise=save();renderSourceReview();
+    const saved=await promise;
+    if(sourcePerson===pending&&connectionPhoto===photoId){$('#sourceConnectionStatus').textContent=saved?'Connection saved as a proposal with its source-page citation. Return to the photograph to review or confirm it.':$('#photoSaveStatus').textContent;renderSourceReview();renderSourceContext();}
+  }
+  function sourceChanged(doc){cancelDrawing();sourceDoc=doc;clearSourceChoice();peopleLimit=30;$('#citeSourcePhoto').hidden=!selected;$('#sourcePersonHotspots').innerHTML='';if(doc){renderSourcePeople();loadSourceMap();}}
+  $('#connectPhotoSource').addEventListener('click',()=>beginSourceConnection(selected));
+  $('#sourcePeopleReport').addEventListener('change',()=>app()?.openSource($('#sourcePeopleReport').value,1));
+  for(const [id,event] of [['sourcePeopleSearch','input'],['sourcePeopleScope','change']])$('#'+id).addEventListener(event,()=>{clearSourceChoice();peopleLimit=30;renderSourcePeople();});
+  $('#sourcePeopleMore').addEventListener('click',()=>{peopleLimit+=30;renderSourcePeople();});
+  $('#sourcePeopleMarkers').addEventListener('change',renderSourcePeople);
+  $('#saveSourceConnection').addEventListener('click',saveSourceConnection);
   function profileChanged(person){selectedTreePerson=person;$('#linkTreePerson').hidden=!selected;}
   $('#linkTreePerson').addEventListener('click',()=>{const person=selectedTreePerson||app()?.selectedProfile;if(!selected||!person)return;selectPhoto(selected);propose(person.id);});
   $('#choosePersonTree').addEventListener('click',()=>{pullFields();profileChanged(app()?.selectedProfile);});
@@ -151,19 +226,24 @@
   ['photoLabel','photoNotes','photoUnidentifiedPeople','photoX','photoY','photoW','photoH'].forEach(id=>$('#'+id).addEventListener('input',()=>{pullFields();markDirty();}));
   $('#photoNotebook').addEventListener('change',e=>{if(!e.target.dataset.claimEvidence)return;const p=current(),c=p.claims.find(c=>c.id===e.target.dataset.claimEvidence);c.evidenceIds=e.target.checked?[...new Set([...c.evidenceIds,e.target.value])]:c.evidenceIds.filter(id=>id!==e.target.value);if(c.status==='confirmed')c.status='proposed';markDirty();renderClaims();});
   document.addEventListener('click',e=>{
+    const connect=e.target.closest('[data-connect-source-photo]');if(connect){e.preventDefault();beginSourceConnection(connect.dataset.connectSourcePhoto);return;}
+    const back=e.target.closest('[data-return-photo]');if(back){e.preventDefault();selectPhoto(back.dataset.returnPhoto);return;}
+    if(e.target.closest('[data-end-connection]')){if(!saving){connectionPhoto=null;clearSourceChoice();renderSourcePeople();}return;}
+    const sourcePersonButton=e.target.closest('[data-source-person]');if(sourcePersonButton){e.preventDefault();chooseSourcePerson(sourcePersonButton.dataset.sourcePerson,sourcePersonButton.dataset.personReport,sourcePersonButton.dataset.personPage);return;}
+    const hotspot=e.target.closest('[data-source-person-ids]');if(hotspot){e.preventDefault();if(sourceDrawing||!sourceDoc||saving)return;const ids=hotspot.dataset.sourcePersonIds.split(' ');if(ids.length===1)chooseSourcePerson(ids[0],sourceDoc.id,sourceDoc.page);else{clearSourceChoice();sourceChoiceIds=ids;$('#sourcePeopleSearch').value='';$('#sourcePeopleScope').value='page';renderSourcePeople();$('#sourcePeopleSummary').focus({preventScroll:true});$('#sourcePeoplePanel').scrollIntoView({block:'start'});}return;}
     const target=e.target.closest('[data-photo-id]');if(target){e.preventDefault();if(suppressClick||wallDrawing)return;selectPhoto(target.dataset.photoId);return;}
     const candidate=e.target.closest('[data-propose-person]');if(candidate){propose(candidate.dataset.proposePerson);return;}
     const action=e.target.closest('[data-claim-action]');if(action){const p=current(),c=p?.claims.find(c=>c.id===action.dataset.claimId);if(!c)return;const prior=c.status;c.status=action.dataset.claimAction;try{rules.validate(p,catalog());markDirty();renderClaims();}catch(error){c.status=prior;message(error.message,true);}return;}
     const remove=e.target.closest('[data-remove-evidence]');if(remove){const p=current();p.evidence=p.evidence.filter(x=>x.id!==remove.dataset.removeEvidence);for(const c of p.claims){if(c.evidenceIds.includes(remove.dataset.removeEvidence)){c.evidenceIds=c.evidenceIds.filter(id=>id!==remove.dataset.removeEvidence);if(c.status==='confirmed')c.status='proposed';}}markDirty();renderClaims();}
   });
-  $('#closePhotoNotebook').addEventListener('click',()=>{allowLeave();selected=null;dirty=false;$('#photoResearchEditor').hidden=true;$('#photoResearchEmpty').hidden=false;$('#closePhotoNotebook').hidden=true;$('#linkTreePerson').hidden=true;$('#citeSourcePhoto').hidden=true;history.pushState(null,'','#wall');renderRegions();});
+  $('#closePhotoNotebook').addEventListener('click',()=>{if(saving)return;allowLeave();selected=null;connectionPhoto=null;clearSourceChoice();dirty=false;$('#photoResearchEditor').hidden=true;$('#photoResearchEmpty').hidden=false;$('#closePhotoNotebook').hidden=true;$('#linkTreePerson').hidden=true;$('#citeSourcePhoto').hidden=true;history.pushState(null,'','#wall');renderRegions();});
   $('#unknownPortraitSource').addEventListener('change',()=>{unknownLimit=16;renderUnknown();});$('#moreUnknownPortraits').addEventListener('click',()=>{unknownLimit+=24;renderUnknown();});
   function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function exportNotebook(){pullFields();const merged=new Map(records);for(const [id,p] of drafts)merged.set(id,p);download({app:'The Living Family Wall',schemaVersion:1,exportedAt:new Date().toISOString(),photographs:[...merged.values()]},'family-photo-research.json');}
   $('#exportPhotoDraft').addEventListener('click',()=>{pullFields();download({app:'The Living Family Wall',schemaVersion:1,photographs:[current()]},'photo-research-draft.json');});
   async function importNotebook(file){if(!file)return;try{if(file.size>5000000)throw Error('Choose a backup smaller than 5 MB.');const data=JSON.parse(await file.text());if(data.app!=='The Living Family Wall'||data.schemaVersion!==1||!Array.isArray(data.photographs)||data.photographs.length>500)throw Error('Choose a photo research notebook export.');const values=data.photographs.map(p=>rules.validate(p,catalog()));if(!values.length)throw Error('This backup contains no photographs.');if(!window.confirm('Restore '+values.length+' photograph drafts? Existing saved records stay unchanged until you save each draft.'))return;for(const p of values){const restored={...p,revision:records.get(p.id)?.revision||0};drafts.set(p.id,restored);if(!records.has(p.id))records.set(p.id,restored);}selectPhoto(values[0].id);notify('Backup restored as drafts. Review and save each photograph.');}catch(error){notify(error.message);}}
   $('#copyPhotoLink').addEventListener('click',async()=>{try{if(!current()?.revision)throw Error('Save this photograph before copying its permanent link.');await navigator.clipboard.writeText(new URL(linkFor(current()),location.href).href);notify('Picture link copied. Your private Site access is required.');}catch(error){message(error.message,true);}});
-  function archiveChanged(){const family=$('#photoFamilyFilter').value,source=$('#evidenceReport').value;$('#photoFamilyFilter').innerHTML='<option value="">All reports</option>'+reportOptions();$('#photoFamilyFilter').value=family;$('#evidenceReport').innerHTML=reportOptions();if(source)$('#evidenceReport').value=source;if(selected)renderEditor();renderUnknown();}
+  function archiveChanged(){const family=$('#photoFamilyFilter').value,source=$('#evidenceReport').value;$('#photoFamilyFilter').innerHTML='<option value="">All reports</option>'+reportOptions();$('#photoFamilyFilter').value=family;$('#evidenceReport').innerHTML=reportOptions();if(source)$('#evidenceReport').value=source;if(selected)renderEditor();renderUnknown();if(!$('#sourceViewer').hidden&&app()?.currentSource){sourceDoc=app().currentSource;renderSourcePeople();loadSourceMap();}}
   function restore(){if(!location.hash.startsWith('#wall'))return;const params=new URLSearchParams(location.hash.split('?')[1]||'');if(params.get('photo'))selectPhoto(params.get('photo'),false);if(params.has('unidentified'))$('#unknownPortraitTitle').scrollIntoView({block:'start'});}
   window.addEventListener('hashchange',restore);window.addEventListener('popstate',restore);
   window.addEventListener('beforeunload',event=>{if(dirty||[...drafts].some(([id,p])=>JSON.stringify(p)!==JSON.stringify(records.get(id)))){event.preventDefault();event.returnValue='';}});

@@ -4,6 +4,18 @@ const rules=require('../photo-research');
 const {Family}=require('../archive-model');
 const catalog={profileIds:['p1','p2'],documents:[{id:'report',pages:10}]};
 const photo=()=>({id:'example',kind:'wall',title:'Sample',rect:[10,20,20,30],notes:'',evidence:[],claims:[]});
+test('connecting a cited source person saves an idempotent proposal with its page evidence',()=>{
+ const person={id:'p1',name:'Alex Example',sources:[{reportId:'report',page:3}]},source={id:'report',page:3};
+ const original={...photo(),revision:4};
+ const linked=rules.connectSourcePerson(original,person,source,'Printed caption names this person.',{claimId:'c1',evidenceId:'e1'},catalog);
+ assert.equal(linked.claims[0].status,'proposed');assert.equal(linked.revision,4);
+ assert.equal(linked.evidence[0].reportId,'report');assert.equal(linked.evidence[0].page,3);assert.deepEqual(linked.claims[0].evidenceIds,['e1']);
+ assert.equal(original.claims.length,0);
+ const retry=rules.connectSourcePerson(linked,person,source,'Printed caption names this person.',{claimId:'c2',evidenceId:'e2'},catalog);
+ assert.equal(retry.claims.length,1);assert.equal(retry.evidence.length,1);
+ assert.throws(()=>rules.connectSourcePerson(original,person,{id:'report',page:4},'Wrong page',{},catalog),/cited on this source page/);
+ assert.throws(()=>rules.connectSourcePerson(original,person,source,'',{},catalog),/Explain why/);
+});
 test('identity confirmation requires an explicit citation and never follows from a name alone',()=>{
  const p=photo();p.claims.push({id:'c1',profileId:'p1',label:'',status:'confirmed',evidenceIds:[]});assert.throws(()=>rules.validate(p,catalog),/supporting evidence/);
  p.evidence.push({id:'e1',kind:'inscription',note:'Named caption',attribution:'Album'});p.claims[0].evidenceIds=['e1'];assert.equal(rules.validate(p,catalog).claims[0].status,'confirmed');

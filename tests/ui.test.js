@@ -48,10 +48,11 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   const history={pushState(a,b,url){location.hash=url;location.href='https://example.test/'+url;},replaceState(a,b,url){this.pushState(a,b,url);}};
   const events={};
   const window={PhotoResearch,innerWidth:1400,confirm:()=>true,FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
-  const metadata=treeData||{memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
+  const metadata=treeData||{snapshotId:archive.snapshotId,memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
   const photoSaved=[],photoRequests=[];
   const fetcher=async (url,options={})=>{
     if(url==='wall-catalog.json')return {ok:true,json:async()=>({regions:photoData?.regions||[]})};
+    if(url==='source-people.json')return {ok:!!photoData?.sourcePeople,json:async()=>photoData?.sourcePeople};
     if(url.startsWith('/api/photo-research')){photoRequests.push({url,options});if(options.method==='PUT'){if(photoData?.saveFailure)return {ok:false,json:async()=>({error:'Synthetic storage failure'})};const record={...JSON.parse(options.body),revision:1};photoSaved.push(record);return {ok:true,json:async()=>({record})};}return {ok:true,json:async()=>({records:photoData?.saved||[]})};}
     return {ok:!missing&&!(treeMissing&&url==='archive-tree.json'),status:missing?404:200,text:async()=>('Synthetic page text for '+url),json:async()=>structuredClone(url==='archive-tree.json'?metadata:url==='archive-private-details.json'?privateData:archive)};
   };
@@ -197,7 +198,7 @@ test('page previews have working previous/next bounds and preserve source links'
 });
 const samplePhoto={id:'wall-example',kind:'wall',title:'Synthetic photograph',rect:[10,20,5,15],claims:[],evidence:[],notes:''};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-function clickDataset(app,key,value){const target={dataset:{[key]:value},closest(selector){return selector==='[data-photo-id]'&&key==='photoId'||selector==='[data-propose-person]'&&key==='proposePerson'?this:null;}};for(const fn of app.handlers.click||[])fn({target,preventDefault(){}});}
+function clickDataset(app,key,value,extra={}){const target={dataset:{[key]:value,...extra},closest(selector){return selector==='[data-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())+']'?this:null;}};for(const fn of app.handlers.click||[])fn({target,preventDefault(){}});}
 test('wall zoom, selection and draft notes save to the notebook API',async()=>{
  const app=await setup(false,'#wall',false,fixture,null,null,{regions:[samplePhoto]});await tick();
  assert.match(app.nodes.get('wallRegions').innerHTML,/wall-example/);
@@ -230,4 +231,47 @@ test('living switch removes known living identity research from notebook and uni
  const app=await setup(false,'#wall?photo=wall-example',false,{profiles:[person]},null,null,{regions:[samplePhoto],saved:[saved]});await tick();
  assert.equal(app.nodes.get('photoNotes').value,'');assert.equal(app.nodes.get('savePhotoResearch').disabled,true);
  assert.doesNotMatch(app.nodes.get('unknownPortraits').innerHTML,/Sensitive synthetic note/);
+});
+const sourceArchive={...fixture,snapshotId:'synthetic-snapshot',documents:[{id:'demo',title:'Synthetic report',pages:3,url:'source-documents/demo.pdf',pageImages:'source-pages/demo',sha256:'synthetic-hash'}]};
+test('unidentified photograph connects directly to a cited person and keeps a single durable proposal on retry',async()=>{
+ const app=await setup(false,'#wall',false,sourceArchive,null,null,{regions:[samplePhoto]});await tick();
+ assert.match(app.nodes.get('unknownPortraits').innerHTML,/data-connect-source-photo="wall-example"/);
+ clickDataset(app,'connectSourcePhoto',samplePhoto.id);
+ assert.match(app.location.hash,/document=demo/);assert.match(app.nodes.get('sourcePeopleList').innerHTML,/Example Test Person/);
+ clickDataset(app,'sourcePerson','synthetic',{personReport:'demo',personPage:'1'});
+ assert.equal(app.nodes.get('sourceConnectionForm').hidden,false);
+ app.nodes.get('sourceConnectionNote').value='The printed caption identifies this person.';
+ app.nodes.get('saveSourceConnection').emit('click');await tick();
+ const saved=app.photoSaved[0];assert.equal(saved.claims[0].profileId,'synthetic');assert.equal(saved.claims[0].status,'proposed');
+ assert.equal(saved.evidence[0].reportId,'demo');assert.equal(saved.evidence[0].page,1);assert.deepEqual(saved.claims[0].evidenceIds,[saved.evidence[0].id]);
+ assert.match(app.nodes.get('sourceConnectionStatus').textContent,/Connection saved/);
+ app.nodes.get('saveSourceConnection').emit('click');await tick();assert.equal(app.photoSaved[1].claims.length,1);assert.equal(app.photoSaved[1].evidence.length,1);
+ app.nodes.get('sourceNext').emit('click');assert.equal(app.nodes.get('sourcePersonReview').hidden,true);
+ app.nodes.get('saveSourceConnection').emit('click');await tick();assert.equal(app.photoSaved.length,2);
+});
+test('ambiguous printed name requires an explicit person selection and report search retains the selected page',async()=>{
+ const second={...fixture.profiles[0],id:'second'},later={...fixture.profiles[0],id:'later',name:'Later Person',sources:[{reportId:'demo',page:2,title:'Synthetic report'}]};
+ const sourcePeople={version:1,snapshotId:'synthetic-snapshot',sourceHashes:{demo:'synthetic-hash'},pages:{demo:{1:[{profileIds:['synthetic','second'],rect:[10,20,30,4]}]}}};
+ const app=await setup(false,'#wall',false,{...sourceArchive,profiles:[fixture.profiles[0],second,later]},null,null,{regions:[samplePhoto],sourcePeople});await tick();
+ app.nodes.get('sourcePeopleMarkers').checked=true;clickDataset(app,'connectSourcePhoto',samplePhoto.id);await tick();
+ assert.match(app.nodes.get('sourcePersonHotspots').innerHTML,/synthetic second/);
+ clickDataset(app,'sourcePersonIds','synthetic second');assert.match(app.nodes.get('sourcePeopleSummary').textContent,/Choose the correct person/);
+ assert.equal(app.nodes.get('sourcePersonReview').hidden,true);assert.equal(app.photoSaved.length,0);
+ app.nodes.get('sourcePeopleScope').value='report';app.nodes.get('sourcePeopleScope').emit('change');
+ app.nodes.get('sourcePeopleSearch').value='Later';app.nodes.get('sourcePeopleSearch').emit('input');
+ assert.match(app.nodes.get('sourcePeopleList').innerHTML,/data-person-page="2"/);
+ clickDataset(app,'sourcePerson','later',{personReport:'demo',personPage:'2'});assert.match(app.location.hash,/page=2/);
+ app.nodes.get('sourceConnectionNote').value='A printed caption.';app.nodes.get('saveSourceConnection').emit('click');await tick();
+ assert.equal(app.photoSaved[0].evidence[0].page,2);
+});
+test('source connection save failures keep the citation draft and living-person selection remains protected',async()=>{
+ const app=await setup(false,'#wall',false,sourceArchive,null,null,{regions:[samplePhoto],saveFailure:true});await tick();
+ clickDataset(app,'connectSourcePhoto',samplePhoto.id);clickDataset(app,'sourcePerson','synthetic',{personReport:'demo',personPage:'1'});
+ app.nodes.get('sourceConnectionNote').value='Keep this written evidence.';app.nodes.get('saveSourceConnection').emit('click');await tick();
+ assert.match(app.nodes.get('sourceConnectionStatus').textContent,/draft has been kept/);assert.equal(app.nodes.get('sourceConnectionNote').value,'Keep this written evidence.');
+ assert.match(app.nodes.get('photoClaims').innerHTML,/Example Test Person/);
+ const living=await setup(false,'#wall',false,{...sourceArchive,profiles:[{...fixture.profiles[0],restricted:true}]},null,null,{regions:[samplePhoto]});await tick();
+ clickDataset(living,'connectSourcePhoto',samplePhoto.id);clickDataset(living,'sourcePerson','synthetic',{personReport:'demo',personPage:'1'});
+ assert.equal(living.nodes.get('sourceConnectionForm').hidden,true);assert.match(living.nodes.get('sourcePersonDetails').innerHTML,/Turn on/);
+ living.nodes.get('sourceConnectionNote').value='Should not save';living.nodes.get('saveSourceConnection').emit('click');await tick();assert.equal(living.photoSaved.length,0);
 });

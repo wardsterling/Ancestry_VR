@@ -11,7 +11,7 @@ a broken application. Existing pilot content and previously published assets rem
 unchanged; a code-only update does not remove them from Git history.
 
 Never push `archive-data.json`, `archive-tree.json`, `archive-private-details.json`,
-`assets/report-portraits/`, `source-documents/`, `source-pages/`, `wall-catalog.json`, `extraction-audit.json`, `rebuild-checks.json`, `dist/`, source reports, screenshots of family data,
+`assets/report-portraits/`, `source-documents/`, `source-pages/`, `wall-catalog.json`, `source-people.json`, `extraction-audit.json`, `rebuild-checks.json`, `dist/`, source reports, screenshots of family data,
 deployment archives, credentials, or Python caches to public GitHub. The ignore rules
 are a safeguard, not a substitute for reviewing staged files.
 
@@ -71,6 +71,22 @@ Private `wall-catalog.json` defines normalized image regions, never facial ident
 A curator can add or adjust boxes with two corner taps and numeric coordinates.
 No face recognition, face embeddings, biometric matching, or appearance-based identity
 inference is used.
+
+From **Awaiting identification**, choose **Connect to source person**. Open the
+photograph's report or another report, then tap a highlighted printed name or select
+from **People in this source**. Search the current page or the whole report; each
+result links to the existing tree and retains its exact citation. Same-name records
+remain separate choices. Explain the written evidence, then **Save proposed connection**.
+The private notebook saves the person and report/page citation together; review the
+proposal there before explicitly confirming it. Group photographs can connect to
+more than one person. Retry preserves drafts without duplicating the same connection.
+Living-person connections require the global details switch to be on.
+
+Written-name highlights come from PDF text coordinates, matched only to profiles
+already cited on that page. They are not face detection or identity evidence by
+themselves. The cited-person list works even if a printed name cannot be highlighted.
+Private `source-people.json` is bound to the archive snapshot and original PDF hashes;
+rebuild it whenever source documents or profile extraction changes.
 
 Each photograph has a durable private research notebook:
 
@@ -171,10 +187,11 @@ For source thumbnails, original-PDF links, and the living-details switch, add
 ```sh
 python3 scripts/build_source_media.py --source-dir /private/reports --archive-dir /private/candidate
 python3 scripts/render_source_pages.py --root /private/candidate
+python3 scripts/build_source_people.py --root /private/candidate
 ```
 
 Media extraction requires PyMuPDF. Promote the candidate's runtime JSON files,
-`assets/report-portraits/`, `source-documents/`, and `source-pages/` together to the private Site checkout.
+`assets/report-portraits/`, `source-documents/`, `source-pages/`, and `source-people.json` together to the private Site checkout.
 The public GitHub workflow rejects all of these private paths. The packager also rejects
 private media left behind in a code-only build and mismatched living-details snapshots.
 
@@ -186,7 +203,14 @@ must not be published. The static packager also rejects a failed or mismatched s
 
 Numbered child references bind report identities. Other merges require corroborating
 full birth dates, explicit parent pairs plus birth information, or the same named
-partner of an already resolved person. Name alone never merges people. Unknown or
+partner of an already resolved person. Undated duplicate children can merge when
+the same two explicit parent identities and printed child ordinal agree, with no
+conflicting recorded vitals or ancestry cycle. This resolution repeats through newly
+connected families and partners. Placeholder names and unmatched same-name records
+remain separate. Each additional merge retains its supporting citations in the
+private extraction audit. Old profile URLs, family edges, source memberships, and
+saved photo-notebook references follow the unique canonical identity. Ambiguous
+redirects still require review. Name alone never merges people. Unknown or
 approximate facts remain unknown or approximate; spouse and child narratives cannot
 supply another person's life events. Same-name identities without enough evidence
 remain separate and are flagged for review.
@@ -281,6 +305,7 @@ Source labels point to the supplied reports and do not establish independent pro
 - `photo-research.js`: geometry, source/identity validation, and portrait grouping
 - `worker/index.mjs`, `db/schema.ts`, `drizzle/`: durable authenticated photo records
 - `scripts/render_source_pages.py`: full-report page previews and extracted text
+- `scripts/build_source_people.py`: source-cited printed-name coordinates
 - `scripts/build-site.mjs`: private Worker and asset build
 - `archive-privacy.js`: reversible living-details display projection
 - `source-viewer.js`: constrained original-PDF URLs and page bounds

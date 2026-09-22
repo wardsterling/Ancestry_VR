@@ -240,6 +240,7 @@ class Extractor:
         self.dsu = DSU()
         self.report_stats = []
         self.private_details = {}
+        self.duplicate_merges = []
 
     def record(self, sid, name, raw, source, role, generation=None):
         if not name:
@@ -443,13 +444,46 @@ class Extractor:
                         self.issues.append(dict(type='identity-merge-blocked-by-relationship',candidates=[a,b]))
                         continue
                     self.dsu.union(ids[0],sid)
-        def merge_partners():
+        def checked_union(a,b,reason):
+            a,b=self.dsu.find(a),self.dsu.find(b)
+            if a==b:
+                return False
+            members=[r for sid,r in self.records.items() if self.dsu.find(sid) in {a,b}]
+            for field in ['birthKey','deathKey','birthPlace','deathPlace']:
+                values={fold(str(c[field])).lstrip('~') for r in members for c in r['claims'] if c.get(field)}
+                if field.endswith('Key'):
+                    conflict=any(not (x.startswith(y) or y.startswith(x)) for x in values for y in values)
+                else:
+                    conflict=len(values)>1
+                if conflict:
+                    return False
+            children=defaultdict(set)
+            for edge in self.edges:
+                children[self.dsu.find(edge['parent'])].add(self.dsu.find(edge['child']))
+            def reaches(start,target):
+                pending=list(children[start]);seen=set()
+                while pending:
+                    node=pending.pop()
+                    if node==target:
+                        return True
+                    if node not in seen:
+                        seen.add(node);pending.extend(children[node])
+                return False
+            if reaches(a,b) or reaches(b,a):
+                return False
+            self.duplicate_merges.append(dict(reason=reason,sourceIds=sorted(r['sid'] for r in members),sources=[s for r in members for s in r['sources']]))
+            self.dsu.union(a,b)
+            return True
+        def merge_partners(checked=False):
             groups={}
             for sid,r in self.records.items():
                 if r.get('partnerOf'):
                     key=(self.dsu.find(r['partnerOf']),name_key(r['name']))
                     if key in groups:
-                        self.dsu.union(groups[key],sid)
+                        if checked:
+                            checked_union(groups[key],sid,'same named partner of one resolved person')
+                        else:
+                            self.dsu.union(groups[key],sid)
                     else:
                         groups[key]=sid
         merge_partners()
@@ -480,6 +514,34 @@ class Extractor:
                 self.edges.append(dict(parent=parent,child=sid,kind=kind,source=source))
         merge_signatures(False)
         merge_partners()
+        # Repeated descendant reports often omit living children's dates. Resolve
+        # duplicates only when BOTH explicit parents are already the same identities
+        # and the reports place the child at the same ordinal in that family.
+        while True:
+            before=len({self.dsu.find(sid) for sid in self.records})
+            parents=defaultdict(set)
+            for edge in self.edges:
+                if edge['kind'] in {'reported-parent','biological-parent'}:
+                    parents[self.dsu.find(edge['child'])].add(self.dsu.find(edge['parent']))
+            clusters=defaultdict(list)
+            for sid,r in self.records.items():
+                clusters[self.dsu.find(sid)].append(r)
+            groups=defaultdict(list)
+            for cid,members in clusters.items():
+                names={name_key(r['name']) for r in members}
+                ordinals={s['childOrdinal'] for r in members for s in r['sources'] if s.get('childOrdinal')}
+                if len(parents[cid])!=2 or len(names)!=1 or len(ordinals)!=1:
+                    continue
+                if any(re.search(r'\b(?:unknown|unnamed|baby|infant|no first name)\b',r['name'],re.I) or len(r['name'].split())<2 for r in members):
+                    continue
+                key=(next(iter(names)),tuple(sorted(parents[cid])),next(iter(ordinals)))
+                groups[key].append(cid)
+            for candidates in groups.values():
+                for cid in candidates[1:]:
+                    checked_union(candidates[0],cid,'same name, two resolved explicit parents, and child ordinal')
+            merge_partners(checked=True)
+            if len({self.dsu.find(sid) for sid in self.records})==before:
+                break
 
     def output(self, previous):
         clusters=defaultdict(list)
@@ -584,7 +646,7 @@ class Extractor:
         memberships=list({(m['profileId'],m['reportId'],m['generation'],m['page']):m for m in memberships}.values())
         payload=dict(schemaVersion=2,profiles=sorted(profiles,key=lambda p:fold(p['name'])),profileCount=len(profiles),restrictedCount=sum(p['restricted'] for p in profiles),generatedFrom=[r[2] for r in REPORTS],idAliases=aliases,sourceIdMap={sid:id_for(sid) for sid in self.records})
         tree=dict(version=2,basis='Explicit report statements and family-group lists; not independently verified',memberships=memberships,edges=edges)
-        audit=dict(reports=self.report_stats,issues=self.issues,conflictingClaims=conflicts,retainedLegacyProfiles=retained,legacyRedirects=len(aliases))
+        audit=dict(reports=self.report_stats,issues=self.issues,conflictingClaims=conflicts,retainedLegacyProfiles=retained,legacyRedirects=len(aliases),duplicateMerges=self.duplicate_merges)
         return payload,tree,audit
 
 

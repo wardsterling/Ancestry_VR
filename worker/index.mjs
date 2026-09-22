@@ -10,7 +10,7 @@ export async function handleResearch(request,env,catalog){
     const db=database(env);
     if(request.method==='GET'&&url.pathname==='/api/photo-research'){
       const result=await db.prepare('SELECT body, revision, updated_at FROM photo_research WHERE owner_id = ? ORDER BY id').bind(owner).all();
-      return json({records:result.results.map(row=>({...JSON.parse(row.body),revision:row.revision,updatedAt:row.updated_at}))});
+      return json({records:result.results.map(row=>({...globalThis.PhotoResearch.redirectReferences(JSON.parse(row.body),catalog),revision:row.revision,updatedAt:row.updated_at}))});
     }
     if(request.method!=='PUT'||!id||url.pathname==='/api/photo-research')return json({error:'Method not allowed.'},405);
     if(request.headers.get('origin')!==url.origin)return json({error:'Save photographs from this Site.'},403);

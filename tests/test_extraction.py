@@ -83,6 +83,42 @@ i. SAM EXAMPLE (son of Sam Example) was born on 02 Feb 1830.
         self.assertEqual(len(archive['profiles']), 1)
         self.assertEqual(len(archive['profiles'][0]['sources']), 2)
 
+    def test_matching_resolved_parents_and_ordinal_merge_undated_child_and_partner(self):
+        text='''Generation 1
+1. ALEX EXAMPLE was born on 01 Jan 1800.
+He married MORGAN SAMPLE. She was born on 02 Feb 1801.
+Alex Example and Morgan Sample had the following child:
+i. CASEY EXAMPLE (son of Alex Example and Morgan Sample). He married TAYLOR TEST.
+'''
+        ex=Extractor()
+        for report in [REPORT,('other','other.pdf','Other synthetic report')]:
+            ex.parse(text,report)
+        previous,_,_=ex.output({})
+        ex.resolve();archive,tree,audit=ex.output(previous)
+        for name in ['Casey Example','Taylor Test']:
+            self.assertEqual(len([p for p in archive['profiles'] if p['name']==name]),1)
+        self.assertTrue(audit['duplicateMerges'])
+        self.assertTrue(validate(archive,tree)['passed'])
+        casey=next(p for p in archive['profiles'] if p['name']=='Casey Example')
+        for old in [p for p in previous['profiles'] if p['name']=='Casey Example']:
+            self.assertEqual(archive['idAliases'][old['id']]['targets'],[casey['id']])
+
+    def test_different_ordinals_conflicting_dates_and_family_only_links_do_not_merge(self):
+        base='''Generation 1
+1. ALEX EXAMPLE was born on 01 Jan 1800.
+He married MORGAN SAMPLE. She was born on 02 Feb 1801.
+Alex Example and Morgan Sample had the following child:
+i. CASEY EXAMPLE (son of Alex Example and Morgan Sample) was born in 1825.
+'''
+        undated=base.replace(' was born in 1825','')
+        cases=[(undated,undated.replace('i. CASEY','ii. CASEY')),
+               (base,base.replace('1825','1826')),
+               (base.replace(' (son of Alex Example and Morgan Sample)',''),base.replace(' (son of Alex Example and Morgan Sample)',''))]
+        for first,second in cases:
+            ex=Extractor();ex.parse(first,REPORT);ex.parse(second,('other','other.pdf','Other synthetic report'));ex.resolve()
+            archive,_,_=ex.output({})
+            self.assertEqual(len([p for p in archive['profiles'] if p['name']=='Casey Example']),2)
+
     def test_no_spouse_or_child_vitals_attached_to_subject(self):
         archive, _, _ = build()
         p = next(p for p in archive['profiles'] if p['name'] == 'Alex Example')
