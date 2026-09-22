@@ -10,11 +10,12 @@ const ProfilePresentation=require('../profile-presentation');
 const ArchivePrivacy=require('../archive-privacy');
 const SourceDocuments=require('../source-viewer');
 const PhotoResearch=require('../photo-research');
+const ArchiveItemRules=require('../archive-items');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=fs.readFileSync(path.join(__dirname,'../search-ui.js'),'utf8');
 const fixture={profiles:[{id:'synthetic',name:'Example Test Person',aliases:['Tester'],birthYear:1800,deathYear:1870,
   years:['1800','1870'],places:['Demo City, VA'],facts:['Synthetic statement only.'],sources:[{reportId:'demo',title:'Synthetic report',page:1}],restricted:false}]};
-async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null) {
+async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null,itemData=null) {
   const nodes=new Map(), scopes=[];
   class Element {
     constructor(id,tag='DIV'){this.id=id;this.tagName=tag;this.value='';this.checked=false;this.hidden=false;this.open=false;this.textContent='';this.dataset={};this.attributes={};this.handlers={};this.options=[];this.selectedIndex=0;this.classList={toggle(){}};this.style={setProperty(){}};this.classList={toggle(){},add(){},remove(){}};this.scrollLeft=0;this.scrollTop=0;this.clientWidth=1000;this.clientHeight=400;nodes.set(id,this);}
@@ -47,21 +48,23 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   const location={hash,href:'https://example.test/'+hash};
   const history={pushState(a,b,url){location.hash=url;location.href='https://example.test/'+url;},replaceState(a,b,url){this.pushState(a,b,url);}};
   const events={};
-  const window={PhotoResearch,innerWidth:1400,confirm:()=>true,FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
+  const window={PhotoResearch,ArchiveItemRules,innerWidth:1400,confirm:()=>true,FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
   const metadata=treeData||{snapshotId:archive.snapshotId,memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
-  const photoSaved=[],photoRequests=[];
+  const photoSaved=[],photoRequests=[],itemSaved=[];
   const fetcher=async (url,options={})=>{
+    if(url.startsWith('/api/archive-items')){if(options.method==='PUT'){if(itemData?.saveFailure)return {ok:false,json:async()=>({error:'Synthetic item storage failure'})};const item={...JSON.parse(options.body.get('metadata')),revision:1,updatedAt:'2026-01-01T00:00:00Z',createdAt:'2026-01-01T00:00:00Z'};itemSaved.push(item);return {ok:true,json:async()=>({item})};}return {ok:true,json:async()=>({items:itemData?.saved||[]})};}
     if(url==='wall-catalog.json')return {ok:true,json:async()=>({regions:photoData?.regions||[]})};
     if(url==='source-people.json')return {ok:!!photoData?.sourcePeople,json:async()=>photoData?.sourcePeople};
     if(url.startsWith('/api/photo-research')){photoRequests.push({url,options});if(options.method==='PUT'){if(photoData?.saveFailure)return {ok:false,json:async()=>({error:'Synthetic storage failure'})};const record={...JSON.parse(options.body),revision:1};photoSaved.push(record);return {ok:true,json:async()=>({record})};}return {ok:true,json:async()=>({records:photoData?.saved||[]})};}
     return {ok:!missing&&!(treeMissing&&url==='archive-tree.json'),status:missing?404:200,text:async()=>('Synthetic page text for '+url),json:async()=>structuredClone(url==='archive-tree.json'?metadata:url==='archive-private-details.json'?privateData:archive)};
   };
-  const context=vm.createContext({window,document,location,history,navigator:{},URL,URLSearchParams,fetch:fetcher,AbortController,setTimeout,clearTimeout,structuredClone,crypto:require('node:crypto').webcrypto});
+  const context=vm.createContext({window,document,location,history,navigator:{},URL,URLSearchParams,FormData,File,Blob,fetch:fetcher,AbortController,setTimeout,clearTimeout,structuredClone,crypto:require('node:crypto').webcrypto});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-explorer.js'),'utf8'),context);
   vm.runInContext(script,context);
   if(photoData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../photo-workspace.js'),'utf8'),context);
+  if(itemData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-intake.js'),'utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
-  return {nodes,navigation,handlers,location,events,window,photoSaved,photoRequests,go(hash){location.hash=hash;for(const fn of events.hashchange||[])fn();}};
+  return {nodes,navigation,handlers,location,events,window,photoSaved,photoRequests,itemSaved,go(hash){location.hash=hash;for(const fn of events.hashchange||[])fn();}};
 }
 test('header search works from an arbitrary app view and routes to results',async()=>{
   const {nodes,navigation}=await setup();nodes.get('globalSearch').value='Person Example';
@@ -198,6 +201,25 @@ test('page previews have working previous/next bounds and preserve source links'
 });
 const samplePhoto={id:'wall-example',kind:'wall',title:'Synthetic photograph',rect:[10,20,5,15],claims:[],evidence:[],notes:''};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+test('archive intake skips all metadata, saves a note, and opens its permanent item link',async()=>{
+ const app=await setup(false,'#archive',false,fixture,null,null,null,{});await tick();
+ app.nodes.get('addItem').emit('click');assert.equal(app.nodes.get('archiveIntake').hidden,false);
+ app.nodes.get('archiveItemKind').value='note';app.nodes.get('archiveItemKind').emit('change');app.nodes.get('archiveItemNote').value='A family memory to preserve.';
+ app.nodes.get('archiveIntakeNext').emit('click');assert.equal(app.nodes.get('archiveIntakeDetails').hidden,false);
+ app.nodes.get('archiveIntakeSkip').emit('click');assert.equal(app.nodes.get('archiveIntakeReview').hidden,false);
+ app.nodes.get('archiveItemForm').emit('submit');await tick();assert.equal(app.itemSaved.length,1);assert.equal(app.itemSaved[0].collection,'');assert.equal(app.itemSaved[0].description,'');
+ assert.equal(app.nodes.get('archiveIntakeSuccess').hidden,false);app.nodes.get('viewSavedArchiveItem').emit('click');await tick();
+ assert.match(app.location.hash,/item=item-/);assert.match(app.nodes.get('archiveItemDetail').innerHTML,/A family memory to preserve/);
+ const search=app.nodes.get('globalSearch');search.value='family memory';search.emit('input');assert.match(app.nodes.get('globalSuggestions').innerHTML,/Archive item/);
+ search.emit('keydown',{key:'ArrowDown'});search.emit('keydown',{key:'Enter'});await tick();assert.match(app.nodes.get('archiveItemDetail').innerHTML,/A family memory to preserve/);
+});
+test('archive intake retains a selected file and optional metadata when saving fails',async()=>{
+ const app=await setup(false,'#archive',false,fixture,null,null,null,{saveFailure:true});await tick();
+ app.nodes.get('addItem').emit('click');const file=new File(['%PDF-1.7 synthetic'], 'sample.pdf',{type:'application/pdf'});app.nodes.get('archiveItemFile').files=[file];app.nodes.get('archiveItemFile').emit('change');
+ app.nodes.get('archiveIntakeNext').emit('click');app.nodes.get('archiveItemCollection').value='Family letters';app.nodes.get('archiveItemDescription').value='Keep this description.';
+ app.nodes.get('archiveIntakeNext').emit('click');app.nodes.get('archiveItemForm').emit('submit');await tick();
+ assert.match(app.nodes.get('archiveIntakeStatus').textContent,/kept here for retry/);assert.equal(app.nodes.get('archiveItemFile').files[0],file);assert.equal(app.nodes.get('archiveItemCollection').value,'Family letters');assert.equal(app.nodes.get('archiveIntakeSuccess').hidden,true);
+});
 function clickDataset(app,key,value,extra={}){const target={dataset:{[key]:value,...extra},closest(selector){return selector==='[data-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())+']'?this:null;}};for(const fn of app.handlers.click||[])fn({target,preventDefault(){}});}
 test('wall zoom, selection and draft notes save to the notebook API',async()=>{
  const app=await setup(false,'#wall',false,fixture,null,null,{regions:[samplePhoto]});await tick();

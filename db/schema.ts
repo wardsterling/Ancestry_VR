@@ -8,3 +8,14 @@ export const photoResearch = sqliteTable('photo_research', {
   revision: integer('revision').notNull().default(1),
   updatedAt: text('updated_at').notNull(),
 }, table => [primaryKey({ columns: [table.ownerId, table.id] })]);
+
+export const archiveItems = sqliteTable('archive_items', {
+  ownerId: text('owner_id').notNull(),
+  id: text('id').notNull(),
+  body: text('body').notNull(),
+  objectKey: text('object_key'),
+  contentHash: text('content_hash'),
+  revision: integer('revision').notNull().default(1),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, table => [primaryKey({ columns: [table.ownerId, table.id] })]);

@@ -63,6 +63,34 @@ PDF viewer. The original unmodified PDF remains available for opening or downloa
 Page previews and originals are unredacted, including when living profile details are
 hidden. Original PDF bytes are checked against their source hashes.
 
+## Add archive items
+
+**Add archive item** opens a three-step workflow: **Add content → Optional details →
+Review & save**. Add one original file (up to 20 MB), a full http/https link, or a
+written note. Title, collection, description, date, place, source/contributor,
+physical location, and linked archive people are all optional. Skip details to save
+immediately; a blank title uses the filename, website, or first note line.
+
+Saved items appear under **Added archive items**. Open/download original files,
+read notes, follow links, edit metadata, and copy a permanent `#archive?item=item-id`
+link. Added items have their own search and participate in global autocomplete and
+text search. Profile-specific family-tree filters remain separate. Linking a person
+is a curator-entered association and does not alter extracted genealogy.
+
+The private Worker keeps item metadata in D1 and original bytes in R2. Every list,
+read, download, and write checks the authenticated owner. Files are served through
+the owner-checked API; object keys are not exposed. Same-origin multipart writes
+have enforced file/request limits. Revision checks reject stale updates. Retrying a
+successful request after a lost response returns the saved item without duplicating
+it. Storage failures retain the form, selected file, and optional metadata for retry.
+Closing the form preserves the in-page draft; unsaved drafts do not survive a reload.
+Original uploads stay unchanged when metadata is edited. Add a new item for another
+original. Known living-person item details follow the global display switch.
+
+Supported files include PDF, JPEG, PNG, GIF, WebP, HEIC/HEIF, TXT, DOC/DOCX, MP3, M4A,
+WAV, MP4, MOV, and WebM. Browser-supported images and PDFs have previews; every
+uploaded original remains downloadable. Other content is stored as a link or note.
+
 ## Explore wall and photograph research
 
 The wall supports button/range zoom, touch pinch, drag to pan, keyboard navigation,
@@ -250,7 +278,7 @@ check `deploy_pages`. Leaving that option unchecked runs validation only. An exp
 requested Pages deployment still fails visibly if Pages setup or publishing fails.
 
 For private Sites, retain its registered project ID, remove `static` from
-`.openai/hosting.json`, and set `"d1": "DB"`. Run `npm ci`, `npm run db:generate` only
+`.openai/hosting.json`, and set `"d1": "DB"` and `"r2": "ARCHIVE_FILES"`. Run `npm ci`, `npm run db:generate` only
 when the schema changes, then `node scripts/build-site.mjs`. The output separates
 `dist/client` assets from `dist/server/index.js`. Generated Drizzle migrations live in
 `drizzle/` and are applied by Sites before Worker publication. Never rewrite an applied
@@ -297,8 +325,8 @@ the app shell; archive requests are network-only. Offline access to family recor
 therefore intentionally unavailable.
 
 The existing guide is a small deterministic pilot, not a general conversational AI.
-Archive intake remains a preview. Photograph registration, notebook saving, and backup
-restoration are implemented. Camera mode remains a camera preview and does not recognize faces.
+Archive intake saves original files, links, and notes with optional collection metadata.
+Photograph registration, notebook saving, and backup restoration are implemented. Camera mode remains a camera preview and does not recognize faces.
 Source labels point to the supplied reports and do not establish independent proof.
 
 ## Files
@@ -307,7 +335,9 @@ Source labels point to the supplied reports and do not establish independent pro
 - `search-ui.js`: global combobox, archive results, inline profiles, sorted gallery, and source-page controls
 - `photo-workspace.js`, `photo-workspace.css`: wall gestures, photo notebook, and unidentified gallery
 - `photo-research.js`: geometry, source/identity validation, and portrait grouping
-- `worker/index.mjs`, `db/schema.ts`, `drizzle/`: durable authenticated photo records
+- `worker/index.mjs`, `db/schema.ts`, `drizzle/`: durable authenticated records
+- `archive-items.js`, `archive-intake.js`, `archive-intake.css`: guided intake and saved-item views
+- `worker/archive-items.mjs`: owner-scoped D1 metadata and R2 originals
 - `scripts/render_source_pages.py`: full-report page previews and extracted text
 - `scripts/build_source_people.py`: source-cited printed-name coordinates
 - `scripts/build-site.mjs`: private Worker and asset build

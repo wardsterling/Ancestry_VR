@@ -1,5 +1,6 @@
 // Bundled with PhotoResearch and a private reference catalog by build-site.mjs.
 import '../photo-research.js';
+import {handleArchiveItems} from './archive-items.mjs';
 const json=(body,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
 function database(env){if(!env.DB)throw Error('Photo research storage is unavailable.');return env.DB;}
 export async function handleResearch(request,env,catalog){
@@ -32,5 +33,6 @@ export async function handleResearch(request,env,catalog){
 export default {async fetch(request,env){
   const path=new URL(request.url).pathname;
   if(path==='/api/photo-research'||path.startsWith('/api/photo-research/'))return handleResearch(request,env,REFERENCE_CATALOG);
+  if(path==='/api/archive-items'||path.startsWith('/api/archive-items/'))return handleArchiveItems(request,env,REFERENCE_CATALOG);
   return env.ASSETS.fetch(request);
 }};

@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="archive.css">
   <link rel="stylesheet" href="archive-explorer.css">
   <link rel="stylesheet" href="report-edition.css">
-  <link rel="stylesheet" href="photo-workspace.css">
+  <link rel="stylesheet" href="photo-workspace.css"><link rel="stylesheet" href="archive-intake.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -136,6 +136,28 @@
 
     <section id="archiveView" class="view" aria-labelledby="archiveTitle">
       <div class="section-heading"><div><p class="eyebrow">Digital family archive</p><h1 id="archiveTitle">Find a person, place, or year</h1></div><button class="primary" id="addItem">+ Add archive item</button></div>
+      <a id="jumpArchiveItems" class="text-button archive-items-jump" href="#archive?items=1">View added archive items</a>
+      <section id="archiveIntake" class="archive-intake card" aria-labelledby="archiveIntakeTitle" hidden>
+        <header class="archive-item-heading"><div><p class="eyebrow">Save to your family archive</p><h2 id="archiveIntakeTitle" tabindex="-1">Add archive item</h2></div><button id="archiveIntakeClose" class="secondary">Close</button></header>
+        <ol id="archiveIntakeSteps" class="connection-steps connection-steps-progress" aria-label="Add archive item progress"></ol>
+        <form id="archiveItemForm" novalidate>
+          <section id="archiveIntakeContent"><h3>1. Add content</h3><label>What would you like to add?<select id="archiveItemKind"><option value="file">A file</option><option value="link">A web link</option><option value="note">A written note</option></select></label>
+            <div id="archiveFileField"><label>Choose one file<input id="archiveItemFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.txt,.doc,.docx,.mp3,.m4a,.wav,.mp4,.mov,.webm"></label><p class="search-help">Photo, PDF, document, audio, or video · up to 20 MB. The original file is preserved.</p><p id="archiveFileName"></p></div>
+            <label id="archiveLinkField" hidden>Web link<input id="archiveItemUrl" type="url" placeholder="https://…" maxlength="2000"></label>
+            <label id="archiveNoteField" hidden>Write your note<textarea id="archiveItemNote" rows="6" maxlength="12000" placeholder="A memory, a transcription, or something you want to preserve."></textarea></label>
+          </section>
+          <section id="archiveIntakeDetails" hidden><h3>2. Optional details</h3><p>Save what you know. Every field below can be left blank or completed later.</p>
+            <div class="archive-metadata-grid"><label>Title (optional)<input id="archiveItemTitle" maxlength="160" placeholder="Uses the filename, website, or first line of your note"></label><label>Collection (optional)<input id="archiveItemCollection" maxlength="160" list="archiveCollectionOptions" placeholder="For example, family letters"><datalist id="archiveCollectionOptions"></datalist></label><label>Date (optional)<input id="archiveItemDate" maxlength="120" placeholder="For example, 1940 or about 1950"></label><label>Place (optional)<input id="archiveItemPlace" maxlength="240"></label><label>Source or contributor (optional)<input id="archiveItemCredit" maxlength="240"></label><label>Physical location (optional)<input id="archiveItemLocation" maxlength="240" placeholder="Album, box, or shelf"></label></div>
+            <label>Description (optional)<textarea id="archiveItemDescription" rows="3" maxlength="4000"></textarea></label>
+            <label>People in this item (optional)<input id="archiveItemPersonSearch" type="search" placeholder="Search existing archive people" autocomplete="off"></label><div id="archiveItemPeople" class="archive-item-people"></div><div id="archiveItemCandidates" class="candidate-list"></div>
+          </section>
+          <section id="archiveIntakeReview" hidden><h3>3. Review &amp; save</h3><div id="archiveItemReview" tabindex="-1"></div><p class="search-help">Saved privately. Adding an item does not change the family tree or identify anyone automatically.</p></section>
+          <p id="archiveIntakeStatus" role="status" aria-live="polite"></p>
+          <div class="archive-item-actions"><button id="archiveIntakeBack" type="button" class="secondary" hidden>Back</button><button id="archiveIntakeSkip" type="button" class="text-button" hidden>Skip optional details</button><button id="archiveIntakeNext" type="button" class="primary">Continue</button><button id="archiveIntakeSave" type="submit" class="primary" hidden>Save archive item</button></div>
+        </form>
+        <div id="archiveIntakeSuccess" hidden><h3>Saved to your archive</h3><p id="archiveIntakeSavedName"></p><div class="archive-item-actions"><button id="viewSavedArchiveItem" class="primary">View saved item</button><button id="addAnotherArchiveItem" class="secondary">Add another item</button></div></div>
+      </section>
+
       <div class="archive-search card search-widget">
         <label for="archiveSearch">Search all descendant reports</label>
         <div class="search-box"><input id="archiveSearch" role="combobox" type="text" maxlength="240" autocomplete="off" placeholder="Search in any word order, or use a year range" aria-controls="searchSuggestions" aria-autocomplete="list" aria-expanded="false" aria-describedby="archiveSearchHelp"><button id="clearSearch" class="text-button" type="button">Clear</button></div>
@@ -200,6 +222,7 @@
       </section>
       <div id="archiveResults" class="profile-results" aria-live="polite"></div>
       <button id="loadMore" class="secondary load-more" hidden>Show more profiles</button>
+      <section id="savedArchiveItems" class="archive-items card" aria-labelledby="savedArchiveItemsTitle"><div class="archive-item-heading"><div><h2 id="savedArchiveItemsTitle" tabindex="-1">Added archive items</h2><p id="archiveItemsSummary" role="status">Loading saved items…</p></div><button id="addItemFromList" class="secondary">+ Add item</button></div><label>Find an added item<input id="archiveItemsSearch" type="search" placeholder="Title, collection, person, date, or place"></label><p class="search-help">These are your saved files, links, and notes. Family-tree filters apply to profiles above.</p><button id="retryArchiveItems" class="secondary" hidden>Try loading again</button><div id="archiveItemsList" class="archive-items-grid"></div><button id="moreArchiveItems" class="secondary" hidden>Show more items</button><section id="archiveItemDetail" class="archive-item-detail" tabindex="-1" aria-label="Saved archive item" hidden></section></section>
       <section class="source-collections"><h2>Source collections</h2><div class="source-grid"><article class="card"><strong>Brimage–Gatling</strong><span>40-page report · 2008</span></article><article class="card"><strong>Thomas Pinn</strong><span>110-page report · 2016</span></article><article class="card"><strong>Edward Turner</strong><span>87-page report · 2016</span></article><article class="card"><strong>Patrick Lee</strong><span>91-page report · 2016</span></article></div></section>
     </section>
 
@@ -217,6 +240,6 @@
   <dialog id="genericDialog"><button class="dialog-close" aria-label="Close">×</button><div id="genericDialogContent"></div></dialog>
   <input id="importFile" type="file" accept="application/json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-privacy.js"></script><script src="source-viewer.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="photo-research.js"></script><script src="search-ui.js"></script><script src="photo-workspace.js"></script>
+  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-privacy.js"></script><script src="source-viewer.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="photo-research.js"></script><script src="search-ui.js"></script><script src="photo-workspace.js"></script><script src="archive-items.js"></script><script src="archive-intake.js"></script>
 </body>
 </html>

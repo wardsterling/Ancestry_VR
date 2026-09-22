@@ -25,7 +25,7 @@ if(archive?.schemaVersion>=2){
   }
 }
 if(!archive){for(const file of ['source-people.json','dist/source-people.json','dist/client/source-people.json','archive-private-details.json','assets/report-portraits','source-documents','source-pages','wall-catalog.json','dist/client/archive-data.json','dist/archive-private-details.json','dist/assets/report-portraits','dist/source-documents']){let found=false;try{await access(path.join(root,file));found=true;}catch{}if(found)throw Error('Private source media is present. Use a clean code-only checkout for a public build.');}}
-const files=['index.html','styles.css','archive.css','archive-explorer.css','report-edition.css','photo-workspace.css','photo-research.js','photo-workspace.js','archive-model.js','archive-privacy.js','source-viewer.js','profile-presentation.js','archive-explorer.js','app.js','search-engine.js','search-ui.js','data.js','manifest.webmanifest','sw.js'];
+const files=['index.html','styles.css','archive.css','archive-explorer.css','report-edition.css','photo-workspace.css','photo-research.js','photo-workspace.js','archive-items.js','archive-intake.js','archive-intake.css','archive-model.js','archive-privacy.js','source-viewer.js','profile-presentation.js','archive-explorer.js','app.js','search-engine.js','search-ui.js','data.js','manifest.webmanifest','sw.js'];
 await mkdir(path.join(root,output),{recursive:true});
 for(const file of files)await copyFile(path.join(root,file),path.join(root,output,file));
 await cp(path.join(root,'assets'),path.join(root,output,'assets'),{recursive:true});

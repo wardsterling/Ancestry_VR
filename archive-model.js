@@ -1,7 +1,7 @@
 /* Pure archive navigation and report-relative family structure. No family data. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ArchiveModel=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
   'use strict';
-  const defaults={view:'tree',group:'place',report:'',generation:'',focus:'',person:'',document:'',page:'',q:'',name:'',place:'',source:'',status:'',from:'',to:'',scope:'all',sort:'relevance',fuzzy:'1',depth:'65',limit:'36'};
+  const defaults={view:'tree',group:'place',report:'',generation:'',focus:'',person:'',document:'',page:'',item:'',items:'',q:'',name:'',place:'',source:'',status:'',from:'',to:'',scope:'all',sort:'relevance',fuzzy:'1',depth:'65',limit:'36'};
   function read(hash='') {
     const params=new URLSearchParams(hash.split('?')[1]||''),state={...defaults};
     for(const k of Object.keys(state))if(params.has(k))state[k]=params.get(k).slice(0,240);
@@ -9,6 +9,8 @@
     state.depth=String(Math.max(0,Math.min(100,Number(state.depth)||0)));
     state.limit=String(Math.max(36,Math.min(10000,Number(state.limit)||36)));
     if(!/^(?:[1-9]\d?|unknown)?$/.test(state.generation))state.generation='';
+    if(state.item&&!/^item-[a-zA-Z0-9-]{1,80}$/.test(state.item))state.item='';
+    if(state.items!=='1')state.items='';
     return state;
   }
   function link(state={},patch={}) {

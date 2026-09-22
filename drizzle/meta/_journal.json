@@ -8,6 +8,13 @@
       "when": 1790108454810,
       "tag": "0000_tricky_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790114465796,
+      "tag": "0001_chief_meltdown",
+      "breakpoints": true
     }
   ]
 }
