@@ -17,23 +17,35 @@
     for(const k of Object.keys(defaults))if(value[k]!==defaults[k])params.set(k,value[k]);
     return '#archive'+(params.size?'?'+params:'');
   }
+  function resolveId(id,profiles,aliases={}) {
+    const targets=aliases[id]?.targets||[id];
+    return [...new Set(targets)].filter(target=>profiles.some(p=>p.id===target));
+  }
+  function relationshipLabel(kind,direction='parents') {
+    if(kind==='family-group')return 'Listed in family group';
+    if(kind==='disputed-parent')return 'Conflicting parent claims';
+    const type={'reported-parent':'Reported','biological-parent':'Biological','adoptive-parent':'Adoptive','step-parent':'Step'}[kind]||'Reported';
+    return type+' '+(direction==='parents'?'parent':'child');
+  }
   class Family {
     constructor(profiles=[],data={}) {
       this.people=new Map(profiles.map(p=>[p.id,p]));this.members=new Map();this.edges=[];
       this.reports=[...new Map(profiles.flatMap(p=>p.sources||[]).map(s=>[s.reportId,{id:s.reportId,title:s.title}])).values()].sort((a,b)=>a.title.localeCompare(b.title));
-      for(const m of data.memberships||[]){const p=this.people.get(m.profileId);if(!p||p.restricted||!Number.isInteger(m.generation)||m.generation<1||m.generation>99)continue;
+      const cited=data.version>=2;
+      for(const m of data.memberships||[]){const p=this.people.get(m.profileId);if(!p||(!cited&&p.restricted)||!Number.isInteger(m.generation)||m.generation<1||m.generation>99)continue;
         const key=m.reportId+'|'+m.profileId;if(!this.members.has(key))this.members.set(key,[]);this.members.get(key).push(m);
       }
       const seen=new Set();
       for(const e of data.edges||[]){const a=this.people.get(e.parentId),b=this.people.get(e.childId),key=[e.reportId,e.parentId,e.childId].join('|');
-        if(!a||!b||a.restricted||b.restricted||seen.has(key)||e.parentId===e.childId)continue;
+        if(!a||!b||(!cited&&(a.restricted||b.restricted))||seen.has(key)||e.parentId===e.childId)continue;
         const ag=this.generation(a.id,e.reportId),bg=this.generation(b.id,e.reportId);
-        if(ag===null||bg!==ag+1)continue;seen.add(key);this.edges.push(e);
+        if(cited?!e.evidence?.some(s=>s.reportId===e.reportId&&Number.isInteger(s.page)&&s.page>0):(ag===null||bg!==ag+1))continue;seen.add(key);this.edges.push(e);
       }
     }
     generation(id,report){const values=new Set((this.members.get(report+'|'+id)||[]).map(m=>m.generation));return values.size===1?[...values][0]:null;}
     evidence(id,report){return this.members.get(report+'|'+id)||[];}
-    relatives(id,report){return {parents:this.edges.filter(e=>e.reportId===report&&e.childId===id).map(e=>this.people.get(e.parentId)),children:this.edges.filter(e=>e.reportId===report&&e.parentId===id).map(e=>this.people.get(e.childId))};}
+    relationships(id,report='') {return this.edges.filter(e=>(!report||e.reportId===report)&&(e.childId===id||e.parentId===id)).map(edge=>{const direction=edge.childId===id?'parents':'children';return {edge,direction,person:this.people.get(direction==='parents'?edge.parentId:edge.childId),label:relationshipLabel(edge.kind,direction)};});}
+    relatives(id,report){const links=this.relationships(id,report),unique=direction=>[...new Map(links.filter(r=>r.direction===direction).map(r=>[r.person.id,r.person])).values()];return {parents:unique('parents'),children:unique('children')};}
     branch(id,report){
       const ids=new Set([id]);
       // Ancestors and descendants only; a common ancestor must not pull in every cousin.
@@ -51,5 +63,5 @@
       return [...groups].sort(([a],[b])=>a.localeCompare(b,undefined,{numeric:true})).map(([label,people])=>({label,people:people.sort((a,b)=>a.name.localeCompare(b.name))}));
     }
   }
-  return {defaults,read,link,Family};
+  return {defaults,read,link,Family,resolveId,relationshipLabel};
 });

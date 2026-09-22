@@ -23,11 +23,12 @@ jobs:
           node-version: '22'
       - name: Check code-only release
         run: |
-          if git ls-files | grep -Eq '(^|/)archive-(data|tree)\.json$|^dist/|\.(tar\.gz|pdf|pyc)$'; then
+          if git ls-files | grep -Eq '(^|/)(archive-(data|tree)|extraction-audit|rebuild-checks)\.json$|^dist/|\.(tar\.gz|pdf|pyc)$'; then
             echo 'Private data or generated artifacts found in source. Publication stopped.'
             exit 1
           fi
           node --test tests/*.test.js
+          python3 -m unittest discover -s tests -p 'test_*.py'
           node --check app.js
           node --check search-ui.js
           node scripts/build-static.mjs

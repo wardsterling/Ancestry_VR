@@ -2,6 +2,8 @@
 *.log
 archive-data.json
 archive-tree.json
+extraction-audit.json
+rebuild-checks.json
 dist/
 upload/
 output/

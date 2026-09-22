@@ -127,3 +127,28 @@ test('connected parent and child nodes navigate by keyboard and retain permanent
   assert.equal(app.nodes.get('connectionName').textContent,'Parent Example');assert.match(app.location.hash,/focus=parent/);
   assert.match(app.nodes.get('connectionTree').innerHTML,/Children <span>\(1\)/);
 });
+test('private cited family links appear in tree and profile even when vitals are restricted',async()=>{
+ const parent={...fixture.profiles[0],id:'parent',name:'Synthetic Parent',restricted:true};
+ const child={...fixture.profiles[0],restricted:true};
+ const metadata={version:2,memberships:[{profileId:'parent',reportId:'demo',generation:1},{profileId:'synthetic',reportId:'demo',generation:2}],edges:[{parentId:'parent',childId:'synthetic',reportId:'demo',kind:'family-group',evidence:[{reportId:'demo',page:3}]}]};
+ const app=await setup(false,'#archive?focus=synthetic&person=synthetic&report=demo',false,{profiles:[parent,child]},metadata);
+ for(const id of ['connectionTree','profileDialogContent']){
+  const text=app.nodes.get(id).innerHTML;assert.match(text,/Synthetic Parent/);assert.match(text,/Listed in family group/);assert.doesNotMatch(text,/Demo City/);
+ }
+ assert.match(app.nodes.get('connectionTree').innerHTML,/Generation 2/);
+ app.go('#archive?view=hive&group=generation');assert.match(app.nodes.get('hiveResults').innerHTML,/Generation 2/);
+});
+test('saved merged profile link opens an identity chooser instead of guessing',async()=>{
+ const second={...fixture.profiles[0],id:'second'};
+ const archive={profiles:[fixture.profiles[0],second],idAliases:{old:{targets:['synthetic','second']}}};
+ const app=await setup(false,'#archive?person=old',false,archive);
+ assert.match(app.nodes.get('profileDialogContent').innerHTML,/Choose a source identity/);
+ assert.match(app.nodes.get('profileDialogContent').innerHTML,/person=second/);
+ assert.match(app.nodes.get('profileDialogContent').innerHTML,/person=synthetic/);
+});
+test('saved branch and profile links follow unique rebuilt identities',async()=>{
+ const archive={profiles:fixture.profiles,idAliases:{old:{targets:['synthetic']}}};
+ const app=await setup(false,'#archive?focus=old&person=old',false,archive);
+ assert.equal(app.nodes.get('connectionName').textContent,'Example Test Person');
+ assert.match(app.nodes.get('profileDialogContent').innerHTML,/Example Test Person/);
+});

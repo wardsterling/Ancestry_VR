@@ -1,7 +1,13 @@
 // Explicit runtime file selection; never include upload folders, caches, or archives.
-import {copyFile,cp,mkdir,access} from 'node:fs/promises';
+import {copyFile,cp,mkdir,access,readFile} from 'node:fs/promises';
 import path from 'node:path';
 const root=process.cwd();
+let archive;
+try{archive=JSON.parse(await readFile(path.join(root,'archive-data.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
+if(archive?.schemaVersion>=2){
+  const tree=JSON.parse(await readFile(path.join(root,'archive-tree.json'),'utf8'));
+  if(!archive.validation?.passed||!archive.snapshotId||archive.snapshotId!==tree.snapshotId)throw Error('Private archive and family tree must be one validated extraction snapshot.');
+}
 const files=['index.html','styles.css','archive.css','archive-explorer.css','archive-model.js','profile-presentation.js','archive-explorer.js','app.js','search-engine.js','search-ui.js','data.js','manifest.webmanifest','sw.js'];
 await mkdir(path.join(root,'dist'),{recursive:true});
 for(const file of files)await copyFile(path.join(root,file),path.join(root,'dist',file));

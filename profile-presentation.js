@@ -54,11 +54,15 @@
     const initials=p.name.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('');
     if(p.restricted)return {birthDate:'Restricted',birthPlace:'Restricted',deathDate:'Restricted',portrait:'',initials,photoLabel:'Photo restricted'};
     const births=[],places=[],deaths=[];
+    const pilot=Object.values(pilotPeople).find(x=>x.archiveId===p.id);
+    if(p.extractionVersion>=2){
+      const value=field=>(p.conflictingFields||[]).includes(field.replace('Date','Key'))?'Conflicting records':p[field]||'Not recorded';
+      return {birthDate:value('birthDate'),birthPlace:value('birthPlace'),deathDate:value('deathDate'),portrait:safePortrait(p.portrait?.src)||safePortrait(pilot?.portrait),initials,photoLabel:'No photo yet'};
+    }
     for(const fact of p.facts||[]){const scope=subjectText(p,fact);if(!scope)continue;const b=eventClause(scope,'birth'),d=eventClause(scope,'death');births.push(date(b));places.push(place(b));deaths.push(date(d));}
     // Explicit structured fields are curator-supplied; old inferred year/place
     // arrays are deliberately not substituted for attributed life events.
     const explicit=value=>typeof value==='string'&&value.trim()?value.trim().slice(0,150):'';
-    const pilot=Object.values(pilotPeople).find(x=>x.archiveId===p.id);
     return {birthDate:explicit(p.birthDate)||combine(births),birthPlace:explicit(p.birthPlace)||combine(places),deathDate:explicit(p.deathDate)||combine(deaths),portrait:safePortrait(p.portrait?.src)||safePortrait(pilot?.portrait),initials,photoLabel:'No photo yet'};
   }
   return {describe,safePortrait,subjectText};

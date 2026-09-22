@@ -9,7 +9,7 @@ only to an owner-private deployment. Its absence produces a clear empty state, n
 a broken application. Existing pilot content and previously published assets remain
 unchanged; a code-only update does not remove them from Git history.
 
-Never push `archive-data.json`, `archive-tree.json`, `dist/`, source reports, screenshots of family data,
+Never push `archive-data.json`, `archive-tree.json`, `extraction-audit.json`, `rebuild-checks.json`, `dist/`, source reports, screenshots of family data,
 deployment archives, credentials, or Python caches to public GitHub. The ignore rules
 are a safeguard, not a substitute for reviewing staged files.
 
@@ -46,8 +46,8 @@ photos use labeled initials; restricted profiles show neither photos nor life de
 No faces are generated or automatically matched. Two existing pilot portraits currently
 have archive-ID assignments.
 
-`profile-presentation.js` uses optional curator-supplied `birthDate`, `birthPlace`, and
-`deathDate` strings, or conservatively reads the named subject's report excerpt. It
+`profile-presentation.js` uses rebuilt structured `birthDate`, `birthPlace`, and
+`deathDate` strings. For older archives it conservatively reads the named subject's report excerpt. It
 stops before spouse narratives, preserves approximate dates, and marks conflicts or
 unknown values. The old inferred birth/death years and general place arrays are not
 used as substitutes: they can contain relatives' events. A place is displayed as a
@@ -66,12 +66,15 @@ generation. A person can belong to multiple place groups. Groups and large colle
 expand incrementally. **Profile list** preserves the original search and sorting tools.
 
 Generations are relative to each report's root, not estimates based on birth years.
-`scripts/build_tree.py` reads layout-preserving `.txt` exports of the source reports
-beside the original uploads and writes private `archive-tree.json`. It matches existing
-profile IDs, uses explicit generation headings and child lists, and cites report pages.
-It never rebuilds or changes the existing profiles. Missing, conflicting, and restricted
-generation assignments remain unassigned. Existing same-name merges limit the accuracy
-of this view; report-derived links still require family review.
+Cited connections remain navigable for profiles with restricted dates or photos,
+including when reports assign conflicting generations. Tree cards, hive groups, and
+profile dialogs use the same relationship model. Profile dialogs show every report's
+connections with page citations.
+
+Relationship labels distinguish explicit reported, biological, adoptive, and step
+parentage from a child merely listed in a family group. Family-group membership does
+not establish parentage. The interface preserves these distinctions rather than
+silently converting every family listing into a biological parent–child link.
 
 Profiles, places, report selections, recorded years, tree focus, and search/filter state
 have hash-based URLs. They survive refresh and support browser Back/Forward and opening
@@ -79,6 +82,9 @@ in another tab. Copy profile link creates a minimal stable-ID link; Copy view li
 includes the current view, filters, report, generation, and depth. Links grant no access
 to the private Site. Search text is held in the URL fragment and browser history;
 there is no external query logging or localStorage query history.
+Old profile/focus links redirect to matched source identities. A previously merged
+name with multiple candidates opens a chooser; the app does not guess which person
+the old link meant. Unmatched legacy entries remain available with their facts withheld.
 
 Examples using synthetic identifiers only:
 
@@ -89,7 +95,39 @@ Examples using synthetic identifiers only:
 
 The optional tree file has `memberships` containing `profileId`, `reportId`,
 `generation`, `page`, and `title`, and `edges` containing `parentId`, `childId`,
-`reportId`, and `page`. Both data files are private runtime inputs, never public code.
+`reportId`, `page`, `kind`, and `evidence`. Version 2 includes restricted profiles'
+cited connections. Both files share a validated `snapshotId`; mismatched files cannot
+be packaged or loaded together. Both are private runtime inputs, never public code.
+
+## Rebuild and validate the private archive
+
+`scripts/extract_reports.py` rebuilds profiles and relationships together from the
+original PDFs with Poppler's `pdftotext -layout` and the Python standard library.
+The older `build_archive.py` and `build_tree.py` commands call this same pipeline.
+
+```sh
+python3 scripts/extract_reports.py --source-dir /private/reports --output-dir /private/candidate --previous /private/current/archive-data.json --checks /private/rebuild-checks.json
+python3 -m unittest discover -s tests -p 'test_*.py'
+```
+
+Review `extraction-audit.json` before promoting the candidate's two runtime JSON
+files together. It records source hashes, entry coverage, citations, conflicts,
+generation/age warnings, retained legacy entries, and optional private family checks.
+Structural failures cannot overwrite the live archive. A staged failed candidate
+must not be published. The static packager also rejects a failed or mismatched snapshot.
+
+Numbered child references bind report identities. Other merges require corroborating
+full birth dates, explicit parent pairs plus birth information, or the same named
+partner of an already resolved person. Name alone never merges people. Unknown or
+approximate facts remain unknown or approximate; spouse and child narratives cannot
+supply another person's life events. Same-name identities without enough evidence
+remain separate and are flagged for review.
+
+Private checks use a `checks` array with `label`, `subject`, `direction` (`parents` or
+`children`), `expected` names, and optional `reportId` and `kind`. These source-reviewed
+fixtures are never public test data. Public tests contain synthetic families only.
+Passing automated checks verifies extraction structure and specified source claims;
+it does not prove that the compiled reports themselves are historically correct.
 
 ## Run and test
 
@@ -124,10 +162,8 @@ The GitHub Pages workflow tests the code and rejects a tracked private dataset.
 }
 ```
 
-These are schema placeholders, not example family records. `scripts/build_archive.py`
-is the existing PDF extraction utility (requires pdfplumber). It is a draft extraction
-pipeline, not a completeness guarantee: same-name merges, page attribution, birth/death
-attribution, living-status inference, and narratives require curator review.
+These are schema placeholders, not example family records. Living-status inference,
+same-name identity decisions, and source inconsistencies still require curator review.
 
 ## Security and limitations
 

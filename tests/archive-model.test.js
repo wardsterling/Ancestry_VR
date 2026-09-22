@@ -25,3 +25,21 @@ test('generation grouping remains relative to each report',()=>{
  const f=new Family([p],{memberships:[{profileId:'a',reportId:'r',generation:2},{profileId:'a',reportId:'r2',generation:6}]});
  assert.deepEqual(f.groups([p],'generation').map(g=>g.label),['Example report · Generation 2','Other report · Generation 6']);
 });
+test('cited relationships survive restricted details and conflicting generations globally',()=>{
+ const v2={...data,version:2,memberships:[...data.memberships,{profileId:'a',generation:5,reportId:'r'}],edges:data.edges.map(e=>({...e,kind:'reported-parent',evidence:[{reportId:'r',page:1}]}))};
+ const f=new Family(people,v2);
+ assert.equal(f.generation('hidden','r'),2);assert.equal(f.generation('a','r'),null);
+ assert.equal(f.edges.length,4);assert.deepEqual(f.relatives('hidden','r').parents.map(p=>p.id),['root']);
+ assert.deepEqual(f.relatives('a','r').parents.map(p=>p.id),['root']);
+});
+test('family-group evidence and explicit parentage retain distinct labels',()=>{
+ const f=new Family(people,{version:2,edges:[{parentId:'root',childId:'a',reportId:'r',kind:'family-group',evidence:[{reportId:'r',page:4}]},{parentId:'root',childId:'a',reportId:'r2',kind:'biological-parent',evidence:[{reportId:'r2',page:8}]}]});
+ assert.deepEqual(f.relationships('a').map(r=>r.label),['Listed in family group','Biological parent']);
+ assert.equal(f.relatives('a').parents.length,1);
+});
+test('v2 ignores uncited links and resolves saved links without guessing identity',()=>{
+ const {resolveId}=require('../archive-model');
+ assert.equal(new Family(people,{version:2,edges:data.edges}).edges.length,0);
+ assert.deepEqual(resolveId('old',people,{old:{targets:['a','b','missing']}}),['a','b']);
+ assert.deepEqual(resolveId('older',people,{older:{targets:['a']}}),['a']);
+});

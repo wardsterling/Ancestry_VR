@@ -12,7 +12,7 @@
   const explorer=new window.ArchiveExplorer(route,(patch)=>{Object.assign(route,patch);if(patch.focus){resetTools();setQuery('');matches=index?index.search('',options()):[];}limit=36;renderResults();writeRoute(true);});
   const fieldIds = {name:'nameFilter',place:'placeFilter',source:'sourceFilter',status:'statusFilter',from:'yearFrom',to:'yearTo'};
   const fieldLabels = {name:'Name',place:'Place',source:'Report',status:'Status',from:'From',to:'To'};
-  let index = null, profiles = [], matches = [], limit = 36, scope = 'all', loading = true, loadError = '';
+  let index = null, profiles = [], idAliases = {}, matches = [], limit = 36, scope = 'all', loading = true, loadError = '';
   const controllers = [];
   const debounce = (fn, delay=120) => { let timer; const f=(...args)=>{clearTimeout(timer);timer=setTimeout(()=>fn(...args),delay);}; f.cancel=()=>clearTimeout(timer); return f; };
   const options = () => ({...Object.fromEntries(Object.entries(fieldIds).map(([key,id])=>[key,$('#'+id).value.trim()])),scope,fuzzy:$('#fuzzySearch').checked});
@@ -24,6 +24,7 @@
   function restoreRoute() {
     if(!location.hash.startsWith('#archive'))return;
     restoring=true;Object.assign(route,Model.read(location.hash));
+    if(!loading&&route.focus){const targets=Model.resolveId(route.focus,profiles,idAliases);if(targets.length===1)route.focus=targets[0];else if(targets.length>1){route.person=route.focus;route.focus='';}}
     Object.entries(fieldIds).forEach(([key,id])=>$('#'+id).value=route[key]);
     setQuery(route.q);setScope(route.scope);$('#resultSort').value=route.sort;$('#fuzzySearch').checked=route.fuzzy!=='0';
     const savedLimit=Number(route.limit);runSearch();limit=savedLimit;renderResults();
@@ -100,6 +101,13 @@
     writeRoute();
   }
   function openProfile(id,push=true) {
+    const targets=Model.resolveId(id,profiles,idAliases);
+    if(targets.length>1){
+      route.person=id;if(push)writeRoute(true);closePanels();
+      $('#profileDialogContent').innerHTML=`<p class="eyebrow">Saved profile link</p><h1>Choose a source identity</h1><p>The previous extraction combined this name. These records remain separate until their identities are confirmed.</p><ul>${targets.map(target=>{const p=profiles.find(p=>p.id===target);return `<li><a data-profile-id="${escape(target)}" href="${escape(href({person:target}))}">${escape(p.name)}</a> · ${escape(dates(p))}<p>${escape([...new Set(p.sources.map(s=>s.title+' · p. '+s.page))].join('; '))}</p></li>`;}).join('')}</ul>`;
+      if(!$('#profileDialog').open)$('#profileDialog').showModal();return;
+    }
+    if(targets.length===1)id=targets[0];
     const p=profiles.find(p=>p.id===id); if(!p){if(!loading)window.LFW.notify('This profile link is not in the connected archive.');return;}
     route.person=id;if(push)writeRoute(true);
     closePanels();
@@ -111,9 +119,9 @@
     const tools=`<div class="profile-link-tools"><button class="secondary small" id="copyProfileLink">Copy profile link</button><a class="secondary small" href="${escape(href({person:'',view:'tree',report,focus:id,generation:String(gen??'unknown'),q:'',name:'',place:'',source:'',status:'',from:'',to:''}))}">Focus in family tree</a></div><input id="profilePermalink" class="permalink-field" aria-label="Permanent profile link to copy" readonly hidden>`;
     const linkedPlaces=!p.restricted?p.places.map(place=>`<a href="${escape(href({person:'',place,focus:'',view:'hive',group:'place'}))}">${escape(place)}</a>`).join(' · '):'';
     const linkedYears=!p.restricted?[p.birthYear,p.deathYear].filter(Boolean).map(year=>`<a href="${escape(href({person:'',q:'',from:String(year),to:String(year),focus:'',view:'list'}))}">${escape(year)}</a>`).join(' · '):'';
-    const related=[...relatives.parents.map(p=>({p,label:'Parent'})),...relatives.children.map(p=>({p,label:'Child'}))];
+    const related=family.relationships(id).map(r=>({p:r.person,label:r.label,edge:r.edge}));
     $('#profileDialogContent').insertAdjacentHTML('afterbegin',tools);
-    $('#profileDialogContent').insertAdjacentHTML('beforeend',`<section><h2>Explore related records</h2>${linkedPlaces?`<p>${linkedPlaces}</p>`:''}${linkedYears?`<p>Recorded years: ${linkedYears}</p>`:''}<div class="tree-relatives">${related.map(({p,label})=>`<a data-profile-id="${escape(p.id)}" href="${escape(href({person:p.id}))}">${label}: ${escape(p.name)}</a>`).join('')}</div><p>${gen===null?'Generation unassigned':'Generation '+gen+' in '+escape(family.reports.find(r=>r.id===report)?.title||'this report')}</p>${p.sources.map(s=>`<a href="${escape(href({person:'',source:s.reportId,report:s.reportId,view:'tree',focus:'',generation:''}))}">${escape(s.title)} · page ${escape(s.page)}</a>`).join('<br>')}</section>`);
+    $('#profileDialogContent').insertAdjacentHTML('beforeend',`<section><h2>Explore related records · all reports</h2>${p.reviewStatus?'<p class="source-note">Legacy entry awaiting a source match. Previous facts have been withheld.</p>':''}${(p.reviewNotes||[]).map(note=>`<p class="source-note">${escape(note)}</p>`).join('')}${p.identityReview?'<p class="source-note">Other records share this name. They remain separate pending identity review.</p>':''}${linkedPlaces?`<p>${linkedPlaces}</p>`:''}${linkedYears?`<p>Recorded years: ${linkedYears}</p>`:''}<div class="tree-relatives">${related.map(({p,label,edge})=>`<div><a data-profile-id="${escape(p.id)}" href="${escape(href({person:p.id}))}">${escape(label)}: ${escape(p.name)}</a><small>${escape(family.reports.find(r=>r.id===edge.reportId)?.title||edge.reportId)} · p. ${escape([...new Set((edge.evidence||[edge]).map(s=>s.page).filter(Boolean))].join(', '))}</small></div>`).join('')}</div><p>${gen===null?'Generation unassigned':'Generation '+gen+' in '+escape(family.reports.find(r=>r.id===report)?.title||'this report')}</p>${p.sources.map(s=>`<a href="${escape(href({person:'',source:s.reportId,report:s.reportId,view:'tree',focus:'',generation:''}))}">${escape(s.title)} · page ${escape(s.page)}</a>`).join('<br>')}</section>`);
     $('#copyProfileLink').addEventListener('click',()=>copyLink(Model.link({person:id})));
     if(!$('#profileDialog').open)$('#profileDialog').showModal();
   }
@@ -203,6 +211,7 @@
       if(!response.ok)throw Error(response.status===404?'missing':'unavailable');
       const data=await response.json();
       if(!Array.isArray(data.profiles))throw Error('invalid');
+      idAliases=data.idAliases||{};
       profiles=data.profiles.filter(p=>p&&typeof p.name==='string'&&typeof p.id==='string').map(p=>({...p,
         aliases:Array.isArray(p.aliases)?p.aliases:[],places:Array.isArray(p.places)?p.places:[],
         facts:Array.isArray(p.facts)?p.facts:[],years:Array.isArray(p.years)?p.years:[],
@@ -210,7 +219,10 @@
       index=new engine.Index(profiles);
       let tree=null;
       try{const response=await fetch('archive-tree.json',{cache:'no-store',signal:abort.signal});if(response.ok)tree=await response.json();}catch{}
+      if(data.snapshotId&&tree?.snapshotId!==data.snapshotId)throw Error('snapshot-mismatch');
       explorer.setData(profiles,tree);
+      $('#archiveValidation').hidden=!data.validation;
+      if(data.validation)$('#archiveValidation').textContent=`Rebuilt from ${data.validation.reports} reports · ${data.validation.citedRelationships.toLocaleString()} cited relationships · ${data.validation.reviewItems||0} extraction items awaiting review · ${data.validation.identityReviewCount||0} profiles need same-name review. Report claims are not independent verification.`;
       const facets=index.facets();
       $('#profileMetric').textContent=profiles.length.toLocaleString();
       $('#placeMetric').textContent=facets.places.length.toLocaleString();

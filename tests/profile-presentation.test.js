@@ -2,6 +2,10 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {describe,safePortrait}=require('../profile-presentation');
 const profile=(fact,extra={})=>({id:'exampleperson',name:'Example Person',facts:[fact],places:['Unrelated Town'],birthYear:1800,deathYear:1890,...extra});
+test('rebuilt structured facts never fall back to discarded narrative claims',()=>{
+ const d=describe(profile('Example Person was born in 1800 in Wrong Town.',{extractionVersion:2,birthDate:null,birthPlace:null,conflictingFields:['birthKey']}));
+ assert.equal(d.birthDate,'Conflicting records');assert.equal(d.birthPlace,'Not recorded');
+});
 test('card dates and birthplace belong to the named subject, with full report dates',()=>{
  const d=describe(profile('EXAMPLE1 PERSON (Ancestor1) was born on 11 Feb 1800 in Demo Town, VA.1,2 He lived in Other Town in 1840. He died Old Age on Dec 31, 1870 in Elsewhere, VA.'));
  assert.equal(d.birthDate,'11 Feb 1800');assert.equal(d.birthPlace,'Demo Town, VA');assert.equal(d.deathDate,'Dec 31, 1870');
