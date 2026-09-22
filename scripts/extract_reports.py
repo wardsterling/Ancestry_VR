@@ -239,6 +239,7 @@ class Extractor:
         self.issues = []
         self.dsu = DSU()
         self.report_stats = []
+        self.private_details = {}
 
     def record(self, sid, name, raw, source, role, generation=None):
         if not name:
@@ -257,9 +258,13 @@ class Extractor:
 
     def parse(self, text, report):
         lines, generation = [], None
+        paragraph_start=True
         for page, content in enumerate(text.split('\f'), 1):
             for raw in content.splitlines():
                 line = raw.strip()
+                if not line:
+                    paragraph_start=True
+                    continue
                 if re.fullmatch(r'Sources|Endnotes|Name Index|Index', line, re.I):
                     break
                 if re.match(r'^Preparer:|^Prepared by', line, re.I):
@@ -273,7 +278,8 @@ class Extractor:
                     generation = int(g[1]) if g[1] else ORDINALS.index(g[2])+1
                     continue
                 if line and generation:
-                    lines.append(dict(text=raw, page=page, generation=generation))
+                    lines.append(dict(text=raw, page=page, generation=generation,paragraphStart=paragraph_start))
+                    paragraph_start=False
             else:
                 continue
             break
@@ -386,6 +392,29 @@ class Extractor:
                 self.records[local]['familyContext'] = header[1]
                 for parent in header[1]:
                     self.edges.append(dict(parent=parent,child=local,kind='family-group',source=header[2],childSource=source))
+        # Some reports print a named biography without a marriage statement or
+        # numbered entry. Retain that person without inventing a family role.
+        known={name_key(n) for r in self.records.values() if r['sources'][0]['reportId']==report[0] for n in r['names']}
+        for root,block,joined in blocks:
+            pattern=r'(?m)^[ \t]*((?:[A-Z][A-Za-z.\u2019\'-]*[ \t]+){1,7}[A-Z][A-Za-z.\u2019\'-]*[\d,]*)(?:[ \t]+\([^)]*\))?\s+(?:was born|died)\b'
+            for match in re.finditer(pattern,joined):
+                raw=joined[match.start():]
+                name=head_name(raw)
+                if (not name or len(name.split())<2 or name_key(name) in known
+                    or name_key(name)!=name_key(match[1])
+                    or re.search(r'\b(?:He|She|They|In)\b',match[1])
+                    or re.search(r'\b[A-Za-z]{3,}\.\s',match[1])):
+                    continue
+                offset=0;page=block[0]['page'];entry_line=block[0]
+                for line in block:
+                    if offset>match.start():
+                        break
+                    page=line['page'];entry_line=line;offset+=len(line['text'])+1
+                if not entry_line.get('paragraphStart'):
+                    continue
+                sid=f'{root}:standalone:{name_key(name)}'
+                self.record(sid,name,raw,citation(report,page,raw),'standalone entry')
+                known.add(name_key(name))
         self.report_stats.append(dict(reportId=report[0], title=report[2], numberedEntries=len(mains), numberedCandidates=len(starts),
             childEntries=sum(r['role']=='child entry' and r['sources'][0]['reportId']==report[0] for r in self.records.values()),
             childCandidates=len(child_starts('\n'.join(l['text'] for l in lines))),
@@ -495,6 +524,9 @@ class Extractor:
             by,dy=value('birthYear'),value('deathYear')
             restricted=not dy and (not by or by>=date.today().year-100)
             fields={k:value(k) for k in ['birthDate','birthYear','birthPlace','deathDate','deathYear','deathPlace']}
+            if restricted:
+                self.private_details[ids[cid]]={**fields,'years':sorted({str(y) for y in [by,dy] if y}),
+                    'places':sorted({fields[k] for k in ['birthPlace','deathPlace'] if fields[k]})}
             fields={k:(None if restricted else v) for k,v in fields.items()}
             for k,values in claims.items():
                 if len(values)>1 and k.endswith(('Key','Place')):
@@ -638,6 +670,7 @@ def main():
     parser.add_argument('--output-dir',type=Path,default=ROOT)
     parser.add_argument('--previous',type=Path,default=ROOT/'archive-data.json')
     parser.add_argument('--checks',type=Path,default=ROOT/'rebuild-checks.json')
+    parser.add_argument('--include-private-details',action='store_true',help='Write a separate owner-private living-details file for the display toggle')
     args=parser.parse_args()
     previous=json.loads(args.previous.read_text()) if args.previous.exists() else {}
     ex=Extractor()
@@ -671,12 +704,15 @@ def main():
         p['reviewNotes']=[labels[k] for k in sorted(flags)]
     snapshot=hashlib.sha256(json.dumps([archive,tree],sort_keys=True).encode()).hexdigest()
     archive['snapshotId']=tree['snapshotId']=audit['snapshotId']=snapshot
+    archive['livingDetailsAvailable']=args.include_private_details
     args.output_dir.mkdir(parents=True,exist_ok=True)
     # Failed candidates go to an explicit staging folder; never replace a live archive.
     if not result['passed'] and args.output_dir.resolve()==ROOT.resolve():
         raise SystemExit('Validation failed. Rebuild into a staging directory and inspect the audit.')
     for filename,data in [('archive-data.json',archive),('archive-tree.json',tree),('extraction-audit.json',audit)]:
         (args.output_dir/filename).write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+    if args.include_private_details:
+        (args.output_dir/'archive-private-details.json').write_text(json.dumps(dict(snapshotId=snapshot,profiles=ex.private_details),ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(dict(**result,issues=len(ex.issues),conflictingClaims=len(audit['conflictingClaims']),retainedLegacy=audit['retainedLegacyProfiles'])))
 
 

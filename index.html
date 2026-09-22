@@ -3,25 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#172e2a">
+  <meta name="theme-color" content="#15363e">
   <meta name="description" content="An evidence-grounded, interactive family history wall.">
-  <title>The Living Family Wall</title>
+  <title>The Living Family Wall · Report Portrait Edition</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23172e2a'/%3E%3Cpath d='M18 46V18h7l7 16 7-16h7v28h-7V31l-7 15-7-15v15z' fill='%23f1ca86'/%3E%3C/svg%3E">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="archive.css">
   <link rel="stylesheet" href="archive-explorer.css">
+  <link rel="stylesheet" href="report-edition.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
     <a class="brand" href="#wall" data-nav="wall" aria-label="Go to family wall">
-      <span class="brand-mark" aria-hidden="true">LW</span>
+      <svg class="brand-tree" viewBox="0 0 48 52" aria-hidden="true"><path d="M24 48V10M24 39L7 29M24 33L40 22M24 25L12 13M24 19L34 7M24 43L44 36M16 49h16"/><circle cx="24" cy="6" r="3"/><circle cx="7" cy="29" r="3"/><circle cx="40" cy="22" r="3"/><circle cx="12" cy="13" r="3"/><circle cx="34" cy="7" r="3"/><circle cx="44" cy="36" r="3"/></svg>
       <span><strong>The Living Family Wall</strong><small>This is my piece of the wall.</small></span>
     </a>
     <nav aria-label="Primary navigation">
       <a class="nav-button active" href="#wall" data-nav="wall">Explore wall</a>
-      <a class="nav-button" href="#archive" data-nav="archive">Archive</a>
+      <a class="nav-button" href="#archive" data-nav="archive">Family tree &amp; archive</a>
       <a class="nav-button" href="#curator" data-nav="curator">Curator</a>
     </nav>
     <button id="helpButton" class="icon-button" aria-label="Open help">?</button>
@@ -34,12 +35,14 @@
       <div id="globalSuggestions" class="autocomplete-panel" role="listbox" aria-label="Global search suggestions" hidden></div>
       <span id="globalSearchHint" class="sr-only">Use up and down arrows to select a suggestion, Enter to open, Escape to close. Control or Command K focuses search.</span>
     </form>
+    <label class="living-switch"><input id="showLiving" type="checkbox" role="switch" disabled><span>Show living-person details<small>Includes people whose status is unknown</small></span></label>
   </header>
 
   <main id="main">
+    <section id="reportLibrary" class="report-library" aria-label="Original descendant reports"></section>
     <section id="wallView" class="view active" aria-labelledby="wallTitle">
       <div class="section-heading">
-        <div><p class="eyebrow">Ward Family picture wall · pilot</p><h1 id="wallTitle">Point, select, and begin a story</h1></div>
+        <div><p class="eyebrow">Report portrait edition</p><h1 id="wallTitle">Your wall. Your family’s photographs.</h1></div>
         <div class="mode-switch" role="group" aria-label="Explore mode">
           <button id="wallMode" class="active">Wall photo</button><button id="cameraMode">Camera</button>
         </div>
@@ -75,6 +78,7 @@
           <div class="safety-note"><span aria-hidden="true">◆</span><p><strong>Evidence first</strong><br>Every biographical response links to its source. AI interpretation is always labeled.</p></div>
         </aside>
       </div>
+      <section class="portrait-gallery card"><div class="gallery-heading"><div><h2>Portraits from your reports</h2><p id="portraitSummary">Loading source photographs…</p></div><a class="secondary" href="#archive">Explore the family tree</a></div><div id="portraitGallery" class="portrait-gallery-grid"></div><button id="morePortraits" class="secondary" hidden>Show more portraits</button></section>
     </section>
 
     <section id="profileView" class="view" aria-labelledby="profileName">
@@ -155,6 +159,7 @@
         <button id="treeReset" class="secondary small">Reset focus</button>
       </div>
       <section id="archiveExplorer" aria-label="Family archive explorer" hidden>
+        <div class="tree-workspace"><div class="tree-workspace-main">
         <section id="familyConnections" class="family-connections" aria-labelledby="connectionTitle" hidden>
           <header class="connection-header"><div><h3 id="connectionTitle">Family connections</h3><p id="connectionName" role="status"></p></div><p>Select a portrait or name to follow that person’s branch. On a keyboard, use ↑ for a parent or ↓ for a child.</p></header>
           <div id="connectionTree" class="connection-tree" tabindex="0" role="region" aria-label="Navigable family tree; scroll sideways to see additional relatives"></div>
@@ -162,8 +167,10 @@
         </section>
         <div id="treeStage" class="tree-stage"><nav id="treeBreadcrumb" aria-label="Tree focus"></nav><div id="treeScene" class="tree-scene"></div></div>
         <p id="treeNote" class="search-help"></p>
+        </div><aside id="profileDetails" class="inline-profile card" aria-label="Selected person and source evidence" hidden><button id="closeProfileDetails" class="secondary small">Close details</button><div id="profileDialogContent"></div></aside></div>
         <div id="hiveResults" hidden></div>
       </section>
+      <section id="sourceViewer" class="source-viewer card" aria-labelledby="sourceViewerTitle" hidden><header><div><p class="eyebrow">Original source document</p><h2 id="sourceViewerTitle"></h2></div><button id="closeSourceViewer" class="secondary">Close PDF</button></header><p class="search-help">Original PDFs are unredacted and may contain living-person details.</p><div class="source-viewer-tools"><a id="sourceOpenOriginal" class="primary" target="_blank" rel="noopener">Open original PDF in a new tab</a><a id="sourceDownload" class="secondary" download>Download original</a><label>Page <input id="sourcePage" type="number" min="1" value="1"></label><button id="sourcePageGo" class="secondary">Go</button></div><iframe id="sourcePdfFrame" title="Original descendant report PDF" loading="lazy"></iframe><p class="search-help">If your browser does not display every PDF page here, use “Open original PDF in a new tab.”</p></section>
       <div id="archiveResults" class="profile-results" aria-live="polite"></div>
       <button id="loadMore" class="secondary load-more" hidden>Show more profiles</button>
       <section class="source-collections"><h2>Source collections</h2><div class="source-grid"><article class="card"><strong>Brimage–Gatling</strong><span>40-page report · 2008</span></article><article class="card"><strong>Thomas Pinn</strong><span>110-page report · 2016</span></article><article class="card"><strong>Edward Turner</strong><span>87-page report · 2016</span></article><article class="card"><strong>Patrick Lee</strong><span>91-page report · 2016</span></article></div></section>
@@ -179,11 +186,10 @@
     </section>
   </main>
 
-  <dialog id="evidenceDialog"><button class="dialog-close" aria-label="Close">×</button><p class="eyebrow">Supporting source</p><h2>Descendants of Minger Brimage · page 9</h2><p class="source-note">Compiled family report created April 7, 2008. A report statement is evidence of what the compiler recorded—not automatic proof that every claim is correct.</p><img src="assets/brimage-report-page-9.jpg" alt="Full page 9 showing entries for Howard Pearson Kennedy, Marian Julia Hill, and Melvin Dow Kennedy"><div class="citation"><strong>Citation</strong><p><em>Descendants of Minger Brimage</em>, RootsMagic report, 7 April 2008, p. 9; family collection.</p></div></dialog>
+  <dialog id="evidenceDialog"><button class="dialog-close" aria-label="Close">×</button><p class="eyebrow">Supporting source</p><h2>Descendants of Minger Brimage · page 9</h2><p class="source-note">Compiled family report created April 7, 2008. A report statement is evidence of what the compiler recorded—not automatic proof that every claim is correct.</p><img src="assets/brimage-report-page-9.jpg" alt="Full page 9 showing entries for Howard Pearson Kennedy, Marian Julia Hill, and Melvin Dow Kennedy"><p><a id="pilotOriginalSource" class="primary" href="source-documents/brimage-gatling.pdf#page=9" data-source-id="brimage-gatling" data-source-page="9" hidden>Open original PDF · page 9</a></p><div class="citation"><strong>Citation</strong><p><em>Descendants of Minger Brimage</em>, RootsMagic report, 7 April 2008, p. 9; family collection.</p></div></dialog>
   <dialog id="genericDialog"><button class="dialog-close" aria-label="Close">×</button><div id="genericDialogContent"></div></dialog>
-  <dialog id="profileDialog" class="profile-dialog"><button class="dialog-close" aria-label="Close">×</button><div id="profileDialogContent"></div></dialog>
   <input id="importFile" type="file" accept="application/json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="search-ui.js"></script>
+  <script src="data.js"></script><script src="app.js"></script><script src="search-engine.js"></script><script src="archive-model.js"></script><script src="archive-privacy.js"></script><script src="source-viewer.js"></script><script src="profile-presentation.js"></script><script src="archive-explorer.js"></script><script src="search-ui.js"></script>
 </body>
 </html>

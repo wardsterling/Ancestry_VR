@@ -1,6 +1,7 @@
 # The Living Family Wall
 
-Static web MVP with a family tree, grouped hive, and browser-local archive search.
+Report Portrait Edition: the original teal report cards, wide family-wall photograph,
+and source-portrait gallery, with a family tree, grouped hive, and browser-local search.
 
 ## Public code / private data
 
@@ -9,7 +10,8 @@ only to an owner-private deployment. Its absence produces a clear empty state, n
 a broken application. Existing pilot content and previously published assets remain
 unchanged; a code-only update does not remove them from Git history.
 
-Never push `archive-data.json`, `archive-tree.json`, `extraction-audit.json`, `rebuild-checks.json`, `dist/`, source reports, screenshots of family data,
+Never push `archive-data.json`, `archive-tree.json`, `archive-private-details.json`,
+`assets/report-portraits/`, `source-documents/`, `extraction-audit.json`, `rebuild-checks.json`, `dist/`, source reports, screenshots of family data,
 deployment archives, credentials, or Python caches to public GitHub. The ignore rules
 are a safeguard, not a substitute for reviewing staged files.
 
@@ -17,7 +19,7 @@ are a safeguard, not a substitute for reviewing staged files.
 
 - Global search in the app header on every main view; Control/Command K focuses it.
 - Autocomplete for people, places, years, and reports. Arrow keys select; Enter opens;
-  Escape dismisses. Person suggestions open the matching archive profile.
+  Escape dismisses. Person suggestions focus the matching person in the existing tree.
 - Names in any word order, recorded aliases/nicknames, accent-insensitive matching,
   and optional one-edit spelling tolerance. Approximate results are labeled.
 - Quoted phrases for exact contiguous words; numeric years never fuzzy-match.
@@ -35,16 +37,30 @@ perform identity matching, infer new relationships, or correct extraction errors
 
 The **Family connections** panel is a navigable tree of the selected person, recorded
 parents, and recorded children. Every card has a thumbnail slot, name, **DoB**, **PoB**,
-and **DoD**. Select a portrait/name to make that person the center; select Open profile
-to inspect evidence. Up/Down on a name moves to a reported parent/child. Wide families
+and **DoD**. Select a portrait/name to make that person the center, with their evidence
+in a panel beside the tree. Profile selections no longer open a modal popup.
+Up/Down on a name moves to a reported parent/child. Wide families
 scroll horizontally, and every person/focus link supports reopening and browser history.
 The generation and hive cards show the same photo and life-event fields.
 
-Portraits use explicit stable-ID assignments to existing assets or an optional
-`portrait: {src: "assets/portraits/example.jpg"}` on a private profile. Missing or failed
-photos use labeled initials; restricted profiles show neither photos nor life details.
-No faces are generated or automatically matched. Two existing pilot portraits currently
-have archive-ID assignments.
+Portraits come from the photographs printed beside named PDF entries. The media
+extractor joins adjoining image strips, matches the nearby name to a cited source
+identity, disambiguates printed record/child markers and birth years, and retains the
+page, bounding box, and printed anchor in a private audit. It performs no face matching
+and generates no faces. Ambiguous placements remain unassigned. Missing photos use
+labeled initials. Explicit private `portrait.src` assignments and pilot assets remain supported.
+
+The **Show living-person details** switch starts off on each page load. It reveals
+available dates, places, and source portraits for living or status-unknown profiles
+inside the owner-private Site. The same display projection feeds search, autocomplete,
+tree, hive, list, gallery, and evidence panels. Switching off removes those details
+and closes any original PDF currently displayed. Names and cited relationships remain
+navigable. This switch is a display preference, not an access-control boundary.
+
+Every report card and profile citation can open the **original PDF** at its cited page
+inside the archive, with page controls, download, and a new-tab fallback for browsers
+with limited embedded PDF support. Originals are unredacted, including when living
+profile details are hidden. Original PDF bytes are checked against their source hashes.
 
 `profile-presentation.js` uses rebuilt structured `birthDate`, `birthPlace`, and
 `deathDate` strings. For older archives it conservatively reads the named subject's report excerpt. It
@@ -68,7 +84,7 @@ expand incrementally. **Profile list** preserves the original search and sorting
 Generations are relative to each report's root, not estimates based on birth years.
 Cited connections remain navigable for profiles with restricted dates or photos,
 including when reports assign conflicting generations. Tree cards, hive groups, and
-profile dialogs use the same relationship model. Profile dialogs show every report's
+inline profile panels use the same relationship model. Profile panels show every report's
 connections with page citations.
 
 Relationship labels distinguish explicit reported, biological, adoptive, and step
@@ -92,6 +108,7 @@ Examples using synthetic identifiers only:
 - `#archive?view=hive&group=place` — place hive
 - `#archive?person=stable-id` — profile
 - `#archive?report=source-id&generation=3&focus=stable-id` — focused family branch
+- `#archive?document=source-id&page=9` — original PDF at the cited page
 
 The optional tree file has `memberships` containing `profileId`, `reportId`,
 `generation`, `page`, and `title`, and `edges` containing `parentId`, `childId`,
@@ -109,6 +126,18 @@ The older `build_archive.py` and `build_tree.py` commands call this same pipelin
 python3 scripts/extract_reports.py --source-dir /private/reports --output-dir /private/candidate --previous /private/current/archive-data.json --checks /private/rebuild-checks.json
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
+
+For source thumbnails, original-PDF links, and the living-details switch, add
+`--include-private-details` to that rebuild, then run:
+
+```sh
+python3 scripts/build_source_media.py --source-dir /private/reports --archive-dir /private/candidate
+```
+
+Media extraction requires PyMuPDF. Promote the candidate's runtime JSON files,
+`assets/report-portraits/`, and `source-documents/` together to the private Site checkout.
+The public GitHub workflow rejects all of these private paths. The packager also rejects
+private media left behind in a code-only build and mismatched living-details snapshots.
 
 Review `extraction-audit.json` before promoting the candidate's two runtime JSON
 files together. It records source hashes, entry coverage, citations, conflicts,
@@ -185,7 +214,11 @@ Source labels point to the supplied reports and do not establish independent pro
 ## Files
 
 - `search-engine.js`: data-independent indexing, matching, suggestions, and filters
-- `search-ui.js`: global combobox, archive results, and profile dialogs
+- `search-ui.js`: global combobox, archive results, inline profiles, gallery, and PDF controls
+- `archive-privacy.js`: reversible living-details display projection
+- `source-viewer.js`: constrained original-PDF URLs and page bounds
+- `report-edition.css`: restored report-portrait visual design
+- `scripts/build_source_media.py`: source-image extraction and private document packaging
 - `archive.css`: responsive search styling
 - `archive-model.js`: validated URLs, report generations, groups, and family relations
 - `archive-explorer.js`, `archive-explorer.css`: family tree, parallax, and hive interface

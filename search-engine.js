@@ -90,8 +90,9 @@
       if (from > to || (query.range && query.range.from > query.range.to)) return [];
       const out = [];
       for (const e of this.entries) {
-        if (options.status === 'restricted' && !e.profile.restricted) continue;
-        if (options.status === 'unrestricted' && e.profile.restricted) continue;
+        const restricted=e.profile.privacyRestricted??e.profile.restricted;
+        if (options.status === 'restricted' && !restricted) continue;
+        if (options.status === 'unrestricted' && restricted) continue;
         if (options.source && !e.sources.some(s => s.reportId === options.source)) continue;
         if ((options.from || options.to) && !e.years.some(y => Number(y) >= from && Number(y) <= to)) continue;
         if (query.range && !e.years.some(y => Number(y) >= query.range.from && Number(y) <= query.range.to)) continue;

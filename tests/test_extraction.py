@@ -147,6 +147,24 @@ DC. MORGAN SAMPLE was born in 1801.
         cycle = {**edge, 'reportId': 'other', 'parentId': edge['childId'], 'childId': edge['parentId']}
         self.assertFalse(validate(archive, {**tree, 'edges': tree['edges']+[cycle]})['passed'])
 
+    def test_standalone_biography_is_retained_without_inventing_a_spouse(self):
+        archive,tree,_=build('''Generation 1
+1. ALEX EXAMPLE was born in 1800.
+
+MORGAN SAMPLE died in 1880 in Example Town.
+''')
+        self.assertIn('morgansample',{p['id'] for p in archive['profiles']})
+        self.assertFalse(tree['edges'])
+
+    def test_wrapped_location_and_pronouns_are_not_new_people(self):
+        archive,_,_=build('''Generation 1
+1. ALEX EXAMPLE was born in 1800 in Washington,
+DC. He died in 1880.
+
+Norway. Jamie Sample was born in 1801.
+''')
+        self.assertEqual([p['name'] for p in archive['profiles']],['Alex Example'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,6 +2,9 @@
 *.log
 archive-data.json
 archive-tree.json
+archive-private-details.json
+assets/report-portraits/
+source-documents/
 extraction-audit.json
 rebuild-checks.json
 dist/

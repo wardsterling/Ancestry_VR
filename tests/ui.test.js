@@ -7,17 +7,19 @@ const path=require('node:path');
 const FamilySearch=require('../search-engine');
 const ArchiveModel=require('../archive-model');
 const ProfilePresentation=require('../profile-presentation');
+const ArchivePrivacy=require('../archive-privacy');
+const SourceDocuments=require('../source-viewer');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=fs.readFileSync(path.join(__dirname,'../search-ui.js'),'utf8');
 const fixture={profiles:[{id:'synthetic',name:'Example Test Person',aliases:['Tester'],birthYear:1800,deathYear:1870,
   years:['1800','1870'],places:['Demo City, VA'],facts:['Synthetic statement only.'],sources:[{reportId:'demo',title:'Synthetic report',page:1}],restricted:false}]};
-async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null) {
+async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null) {
   const nodes=new Map(), scopes=[];
   class Element {
     constructor(id,tag='DIV'){this.id=id;this.tagName=tag;this.value='';this.checked=false;this.hidden=false;this.open=false;this.textContent='';this.dataset={};this.attributes={};this.handlers={};this.options=[];this.selectedIndex=0;this.classList={toggle(){}};this.style={setProperty(){}};nodes.set(id,this);}
     set innerHTML(value){this.markup=value;
       this.options=[...value.matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(m=>({value:m[1],text:m[2]}));
-      for(const m of value.matchAll(/id="([^"]+)"/g))if(!nodes.has(m[1]))new Element(m[1]);
+      for(const m of value.matchAll(/\sid="([^"]+)"/g))if(!nodes.has(m[1]))new Element(m[1]);
     }
     get innerHTML(){return this.markup||'';}
     insertAdjacentHTML(position,text){this.innerHTML=position==='afterbegin'?text+this.innerHTML:this.innerHTML+text;}
@@ -28,7 +30,7 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
     querySelectorAll(){return [...nodes.values()].filter(n=>n.id.startsWith(this.id+'-'));}
     closest(){return null;}
   }
-  for(const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/gi))new Element(match[2],match[1].toUpperCase());
+  for(const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\sid="([^"]+)"[^>]*>/gi))new Element(match[2],match[1].toUpperCase());
   for(const key of ['all','name','place','date']){const e=new Element('scope-'+key,'BUTTON');e.dataset.scope=key;scopes.push(e);}
   nodes.get('fuzzySearch').checked=true;nodes.get('resultSort').value='relevance';
   nodes.get('statusFilter').options=[{text:'All profiles'}];
@@ -41,9 +43,9 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   const location={hash,href:'https://example.test/'+hash};
   const history={pushState(a,b,url){location.hash=url;location.href='https://example.test/'+url;},replaceState(a,b,url){this.pushState(a,b,url);}};
   const events={};
-  const window={FamilySearch,ArchiveModel,ProfilePresentation,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
+  const window={FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
   const metadata=treeData||{memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
-  const context=vm.createContext({window,document,location,history,navigator:{},URL,URLSearchParams,fetch:async url=>({ok:!missing&&!(treeMissing&&url==='archive-tree.json'),status:missing?404:200,json:async()=>structuredClone(url==='archive-tree.json'?metadata:archive)}),AbortController,setTimeout,clearTimeout});
+  const context=vm.createContext({window,document,location,history,navigator:{},URL,URLSearchParams,fetch:async url=>({ok:!missing&&!(treeMissing&&url==='archive-tree.json'),status:missing?404:200,json:async()=>structuredClone(url==='archive-tree.json'?metadata:url==='archive-private-details.json'?privateData:archive)}),AbortController,setTimeout,clearTimeout});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-explorer.js'),'utf8'),context);
   vm.runInContext(script,context);
   await new Promise(resolve=>setImmediate(resolve));
@@ -59,7 +61,7 @@ test('keyboard autocomplete opens a profile and clears active-descendant state',
   const {nodes}=await setup();const input=nodes.get('globalSearch');input.value='Tester';input.emit('input');
   assert.equal(input.attributes['aria-expanded'],'true');input.emit('keydown',{key:'ArrowDown'});
   assert.equal(input.attributes['aria-activedescendant'],'globalSuggestions-0');input.emit('keydown',{key:'Enter'});
-  assert.equal(nodes.get('profileDialog').open,true);assert.match(nodes.get('profileDialogContent').innerHTML,/Synthetic statement/);
+  assert.equal(nodes.get('profileDetails').hidden,false);assert.match(nodes.get('profileDialogContent').innerHTML,/Synthetic statement/);
   assert.equal(input.attributes['aria-expanded'],'false');assert.equal(input.attributes['aria-activedescendant'],undefined);
 });
 test('invalid date range explains the problem and reset restores the results',async()=>{
@@ -74,7 +76,7 @@ test('code-only deployment has a clear missing-archive state without a crash',as
   assert.match(nodes.get('globalSuggestions').innerHTML,/No private archive connected/);
 });
 test('HTML has one of every literal search selector and correct accessible targets',()=>{
-  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length);
+  const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length);
   for(const match of script.matchAll(/\$\('#([a-zA-Z][a-zA-Z0-9]+)'\)/g))assert(ids.includes(match[1])||script.includes(`id="${match[1]}"`),match[1]);
   for(const id of ['globalSuggestions','searchSuggestions'])assert(html.includes(`aria-controls="${id}"`));
 });
@@ -83,15 +85,15 @@ test('archive defaults to report-relative family tree and has permanent person l
   assert.equal(nodes.get('archiveResults').hidden,true);assert.match(nodes.get('treeScene').innerHTML,/Generation 2/);
   assert.match(nodes.get('treeScene').innerHTML,/person=synthetic/);
 });
-test('deep link restores hive grouping, filters and selected profile after data loads',async()=>{
+test('selected profile deep link opens its tree while preserving identity',async()=>{
   const {nodes}=await setup(false,'#archive?view=hive&group=name&place=Demo&person=synthetic');
-  assert.equal(nodes.get('archiveMode').value,'hive');assert.equal(nodes.get('hiveGroup').value,'name');
-  assert.equal(nodes.get('placeFilter').value,'Demo');assert.equal(nodes.get('profileDialog').open,true);
-  assert.match(nodes.get('hiveResults').innerHTML,/Example Test Person/);
+  assert.equal(nodes.get('archiveMode').value,'tree');
+  assert.equal(nodes.get('placeFilter').value,'');assert.equal(nodes.get('profileDetails').hidden,false);
+  assert.equal(nodes.get('connectionName').textContent,'Example Test Person');
 });
 test('back/forward style hash navigation restores state and closes the profile',async()=>{
   const app=await setup(false,'#archive?person=synthetic');app.go('#archive?view=hive&group=place');
-  assert.equal(app.nodes.get('profileDialog').open,false);assert.equal(app.nodes.get('archiveMode').value,'hive');
+  assert.equal(app.nodes.get('profileDetails').hidden,true);assert.equal(app.nodes.get('archiveMode').value,'hive');
   app.go('#archive?view=list&q=no-such-person');assert.match(app.nodes.get('resultSummary').textContent,/0 matching/);
 });
 test('missing tree metadata preserves profiles as unassigned without guessed generations',async()=>{
@@ -151,4 +153,22 @@ test('saved branch and profile links follow unique rebuilt identities',async()=>
  const app=await setup(false,'#archive?focus=old&person=old',false,archive);
  assert.equal(app.nodes.get('connectionName').textContent,'Example Test Person');
  assert.match(app.nodes.get('profileDialogContent').innerHTML,/Example Test Person/);
+});
+test('living switch updates tree vitals and removes details again when switched off',async()=>{
+ const living={...fixture.profiles[0],restricted:true,extractionVersion:2};
+ const archive={profiles:[living],snapshotId:'demo-snapshot',livingDetailsAvailable:true};
+ const tree={version:2,snapshotId:'demo-snapshot',memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
+ const details={snapshotId:'demo-snapshot',profiles:{synthetic:{birthDate:'12 Apr 2000',birthYear:2000,birthPlace:'Synthetic Town',places:['Synthetic Town'],years:['2000'],portrait:{src:'assets/report-portraits/synthetic.jpg'}}}};
+ const app=await setup(false,'#archive?person=synthetic',false,archive,tree,details),toggle=app.nodes.get('showLiving');
+ assert.doesNotMatch(app.nodes.get('connectionTree').innerHTML,/Synthetic Town/);
+ toggle.checked=true;toggle.emit('change');await new Promise(resolve=>setImmediate(resolve));
+ assert.match(app.nodes.get('connectionTree').innerHTML,/Synthetic Town/);assert.match(app.nodes.get('profileDialogContent').innerHTML,/12 Apr 2000/);
+ toggle.checked=false;toggle.emit('change');assert.doesNotMatch(app.nodes.get('connectionTree').innerHTML,/Synthetic Town/);assert.doesNotMatch(app.nodes.get('profileDialogContent').innerHTML,/12 Apr 2000/);
+});
+test('original source deep links show the actual PDF and preserve page navigation',async()=>{
+ const archive={...fixture,documents:[{id:'demo',title:'Synthetic report',url:'source-documents/demo.pdf',pages:8}]};
+ const app=await setup(false,'#archive?document=demo&page=3',false,archive);
+ assert.equal(app.nodes.get('sourceViewer').hidden,false);assert.equal(app.nodes.get('sourcePdfFrame').attributes.src,'source-documents/demo.pdf#page=3');
+ app.nodes.get('sourcePage').value='5';app.nodes.get('sourcePageGo').emit('click');assert.match(app.location.hash,/page=5/);
+ app.nodes.get('closeSourceViewer').emit('click');assert.equal(app.nodes.get('sourcePdfFrame').attributes.src,undefined);
 });
