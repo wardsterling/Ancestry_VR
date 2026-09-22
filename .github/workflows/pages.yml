@@ -1,20 +1,22 @@
-name: Deploy static MVP to GitHub Pages
+name: Validate code-only MVP
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      deploy_pages:
+        description: 'Publish the code-only demo to GitHub Pages (requires Pages enabled with GitHub Actions)'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
-  group: pages
+  group: code-checks-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  validate:
+    name: Validate code and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,10 +34,29 @@ jobs:
           node --check app.js
           node --check search-ui.js
           node scripts/build-static.mjs
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Prepare optional Pages artifact
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy_pages && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+      - name: Report validation result
+        run: |
+          echo 'Code checks and the code-only static build passed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The full family archive is hosted privately on Sites. GitHub Pages is optional and runs only when explicitly selected in Run workflow.' >> "$GITHUB_STEP_SUMMARY"
+  deploy:
+    name: Optional GitHub Pages deployment
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_pages && github.ref == 'refs/heads/main'
+    needs: validate
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/configure-pages@v5
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

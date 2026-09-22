@@ -211,7 +211,15 @@ node --test tests/*.test.js
 Open `http://localhost:8080`. Camera preview needs HTTPS or localhost and user permission.
 To package the static files, run `node scripts/build-static.mjs`. The script copies the
 locally supplied archive only if present, so never publish a private `dist/` publicly.
-The GitHub Pages workflow tests the code and rejects a tracked private dataset.
+The **Validate code-only MVP** workflow tests and builds every push to `main`, and
+rejects tracked private datasets. The full archive is published privately on Sites;
+normal code updates do not attempt to create or publish a GitHub Pages site.
+
+GitHub Pages is an optional code-only demo. To use it, a repository administrator must
+first enable **Settings → Pages → Build and deployment → GitHub Actions**. Then choose
+**Actions → Validate code-only MVP → Run workflow**, select `main`, and explicitly
+check `deploy_pages`. Leaving that option unchecked runs validation only. An explicitly
+requested Pages deployment still fails visibly if Pages setup or publishing fails.
 
 For private Sites, retain its registered project ID, remove `static` from
 `.openai/hosting.json`, and set `"d1": "DB"`. Run `npm ci`, `npm run db:generate` only
