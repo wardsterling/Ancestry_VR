@@ -36,4 +36,5 @@ test('explicit portrait mappings require a stable profile ID',()=>{
 test('conflicting source dates remain marked for review; no synthetic exact day',()=>{
  const d=describe(profile('',{facts:['Example Person was born in 1800.','Example Person was born in 1802.']}));assert.equal(d.birthDate,'Conflicting records');
  assert.equal(describe(profile('Example Person was born before 1800.')).birthDate,'before 1800');
+ assert.equal(describe(profile('Example Person was born c. 1800.')).birthDate,'circa 1800');
 });

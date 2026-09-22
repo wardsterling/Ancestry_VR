@@ -3,11 +3,11 @@
   'use strict';
   const key=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z]/g,'');
   const months='Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?';
-  const datePattern=new RegExp('\\b(?:(about|abt\\.?|before|after|circa|c\\.)\\s+)?((?:'+months+')\\s+\\d{1,2},?\\s+[12]\\d{3}|\\d{1,2}\\s+(?:'+months+')\\s+[12]\\d{3}|(?:'+months+')\\s+[12]\\d{3}|[12]\\d{3})\\b','i');
+  const datePattern=new RegExp('\\b(?:(about|abt\\.?|before|after|circa|c\\.?)\\s+)?((?:'+months+')\\s+\\d{1,2},?\\s+[12]\\d{3}|\\d{1,2}\\s+(?:'+months+')\\s+[12]\\d{3}|(?:'+months+')\\s+[12]\\d{3}|[12]\\d{3})\\b','i');
   function date(text){
     const range=text.match(/\bbetween\s+([12]\d{3})\s+and\s+([12]\d{3})\b/i);
     if(range)return `Between ${range[1]} and ${range[2]}`;
-    const m=text.match(datePattern);return m?((m[1]?m[1].replace(/^abt\.?$/i,'about')+' ':'')+m[2]).replace(/\s+/g,' ').trim():'';
+    const m=text.match(datePattern);return m?((m[1]?m[1].replace(/^abt\.?$/i,'about').replace(/^c\.?$/i,'circa')+' ':'')+m[2]).replace(/\s+/g,' ').trim():'';
   }
   function subjectText(p,fact){
     const text=String(fact).replace(/\s+/g,' ').trim();
