@@ -14,7 +14,10 @@ test('connecting a cited source person saves an idempotent proposal with its pag
  const retry=rules.connectSourcePerson(linked,person,source,'Printed caption names this person.',{claimId:'c2',evidenceId:'e2'},catalog);
  assert.equal(retry.claims.length,1);assert.equal(retry.evidence.length,1);
  assert.throws(()=>rules.connectSourcePerson(original,person,{id:'report',page:4},'Wrong page',{},catalog),/cited on this source page/);
- assert.throws(()=>rules.connectSourcePerson(original,person,source,'',{},catalog),/Explain why/);
+ const withoutComment=rules.connectSourcePerson(original,person,source,'  ',{claimId:'c3',evidenceId:'e3'},catalog);
+ assert.equal(withoutComment.claims[0].status,'proposed');assert.equal(withoutComment.evidence[0].page,3);
+ assert.match(withoutComment.evidence[0].note,/no comment added/);
+ assert.equal(rules.connectSourcePerson(withoutComment,person,source,'',{claimId:'c4',evidenceId:'e4'},catalog).evidence.length,1);
 });
 test('identity confirmation requires an explicit citation and never follows from a name alone',()=>{
  const p=photo();p.claims.push({id:'c1',profileId:'p1',label:'',status:'confirmed',evidenceIds:[]});assert.throws(()=>rules.validate(p,catalog),/supporting evidence/);

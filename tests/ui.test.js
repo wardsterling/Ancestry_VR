@@ -233,20 +233,22 @@ test('living switch removes known living identity research from notebook and uni
  assert.doesNotMatch(app.nodes.get('unknownPortraits').innerHTML,/Sensitive synthetic note/);
 });
 const sourceArchive={...fixture,snapshotId:'synthetic-snapshot',documents:[{id:'demo',title:'Synthetic report',pages:3,url:'source-documents/demo.pdf',pageImages:'source-pages/demo',sha256:'synthetic-hash'}]};
-test('unidentified photograph connects directly to a cited person and keeps a single durable proposal on retry',async()=>{
+test('unidentified photograph connects without a comment and keeps a single durable proposal on retry',async()=>{
  const app=await setup(false,'#wall',false,sourceArchive,null,null,{regions:[samplePhoto]});await tick();
  assert.match(app.nodes.get('unknownPortraits').innerHTML,/data-connect-source-photo="wall-example"/);
  clickDataset(app,'connectSourcePhoto',samplePhoto.id);
  assert.match(app.location.hash,/document=demo/);assert.match(app.nodes.get('sourcePeopleList').innerHTML,/Example Test Person/);
  clickDataset(app,'sourcePerson','synthetic',{personReport:'demo',personPage:'1'});
  assert.equal(app.nodes.get('sourceConnectionForm').hidden,false);
- app.nodes.get('sourceConnectionNote').value='The printed caption identifies this person.';
+ assert.equal(app.nodes.get('sourceConnectionNote').value,'');
  app.nodes.get('saveSourceConnection').emit('click');await tick();
  const saved=app.photoSaved[0];assert.equal(saved.claims[0].profileId,'synthetic');assert.equal(saved.claims[0].status,'proposed');
  assert.equal(saved.evidence[0].reportId,'demo');assert.equal(saved.evidence[0].page,1);assert.deepEqual(saved.claims[0].evidenceIds,[saved.evidence[0].id]);
+ assert.match(saved.evidence[0].note,/no comment added/);
+ assert.equal(app.nodes.get('reviewSavedConnection').hidden,false);
  assert.match(app.nodes.get('sourceConnectionStatus').textContent,/Connection saved/);
  app.nodes.get('saveSourceConnection').emit('click');await tick();assert.equal(app.photoSaved[1].claims.length,1);assert.equal(app.photoSaved[1].evidence.length,1);
- app.nodes.get('sourceNext').emit('click');assert.equal(app.nodes.get('sourcePersonReview').hidden,true);
+ app.nodes.get('sourceNext').emit('click');assert.equal(app.nodes.get('sourcePersonReview').hidden,true);assert.equal(app.nodes.get('reviewSavedConnection').hidden,true);
  app.nodes.get('saveSourceConnection').emit('click');await tick();assert.equal(app.photoSaved.length,2);
 });
 test('ambiguous printed name requires an explicit person selection and report search retains the selected page',async()=>{

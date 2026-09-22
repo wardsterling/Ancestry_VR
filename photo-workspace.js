@@ -7,7 +7,7 @@
   const app=()=>window.ArchiveApp;
   const records=new Map(),drafts=new Map();
   let selected=null,ready=false,dirty=false,saving=false,unknownLimit=16,sourceDrawing=false,wallDrawing=false,firstPoint=null,scale=1,sourceDoc=null,selectedTreePerson=null;
-  let connectionPhoto=null,sourcePerson=null,sourceChoiceIds=null,peopleLimit=30,sourceMap=null,sourceMapState='idle';
+  let connectionPhoto=null,sourcePerson=null,sourceChoiceIds=null,peopleLimit=30,sourceMap=null,sourceMapState='idle',connectionSaved=false;
   const catalog=()=>({documents:app()?.documents||[],profileIds:(app()?.profiles||[]).map(p=>p.id),profileAliases:app()?.profileAliases||{}});
   const current=()=>drafts.get(selected)||records.get(selected);
   const profile=id=>app()?.profiles.find(p=>p.id===id);
@@ -140,7 +140,14 @@
   $('#sourcePageCanvas').addEventListener('pointermove',e=>{if(sourceDrawing&&firstPoint)drawBox('sourceDraftRect',firstPoint,localPoint(e,$('#sourcePageCanvas')));});
   $('#addWallPhoto').addEventListener('click',startWallDrawing);
   $('#markSourcePhoto').addEventListener('click',()=>{if(sourceDrawing){cancelDrawing();return;}cancelDrawing();sourceDoc=app()?.currentSource;if(!sourceDoc?.pageImage)return;sourceDrawing=true;$('#sourcePageCanvas').classList.add('is-drawing');$('#markSourcePhoto').textContent='Cancel marking';$('#sourcePageStatus').textContent='Tap two opposite corners around the portrait, then enter what you know.';});
-  function clearSourceChoice(){sourcePerson=null;sourceChoiceIds=null;$('#sourceConnectionNote').value='';$('#sourceConnectionStatus').textContent='';$('#sourcePersonReview').hidden=true;}
+  function clearSourceChoice(){sourcePerson=null;sourceChoiceIds=null;connectionSaved=false;$('#sourceConnectionNote').value='';$('#sourceConnectionStatus').textContent='';$('#sourcePersonReview').hidden=true;$('#reviewSavedConnection').hidden=true;renderConnectionWorkflow();}
+  function renderConnectionWorkflow(){
+    const active=!!connectionPhoto,step=connectionSaved?4:sourcePerson?3:2;
+    $('#sourceConnectionWorkflow').hidden=!active;
+    if(!active){$('#sourceConnectionWorkflow').innerHTML='';return;}
+    const steps=[['Choose a photo','Photo selected'],['Choose a source person',sourcePerson?'Person selected':'Tap a name in the report or list below'],['Save connection',connectionSaved?'Connection saved':'Add an optional comment, then save']];
+    $('#sourceConnectionWorkflow').innerHTML=`<ol class="connection-steps connection-steps-progress" aria-label="Connection progress">${steps.map(([label,help],i)=>{const number=i+1,done=number<step;return `<li class="${done?'is-complete':number===step?'is-current':''}"${number===step?' aria-current="step"':''}><span class="connection-step-number" aria-hidden="true">${done?'✓':number}</span><div><strong>${esc(label)}</strong><small>${esc(help)}</small></div></li>`;}).join('')}</ol>`;
+  }
   async function loadSourceMap(){
     if(sourceMapState!=='idle')return;sourceMapState='loading';
     try{const response=await fetch('source-people.json',{cache:'no-store'});if(!response.ok)throw Error();sourceMap=await response.json();sourceMapState='ready';}
@@ -150,7 +157,8 @@
   function renderSourceContext(){
     const p=connectionPhoto&&(drafts.get(connectionPhoto)||records.get(connectionPhoto));
     $('#sourceConnectionContext').hidden=!p;
-    $('#sourceConnectionContext').innerHTML=p?`<div class="source-connection-thumb">${crop(p)}</div><div><strong>Connect: ${esc(p.title)}</strong><p>Choose a person named in the source, then explain the evidence for this photograph.</p><button class="secondary" data-return-photo="${esc(p.id)}">Return to photograph</button> <button class="text-button" data-end-connection="true">Stop connecting</button></div>`:'';
+    $('#sourceConnectionContext').innerHTML=p?`<div class="source-connection-thumb">${crop(p)}</div><div><strong>Your photo: ${esc(p.title)}</strong><p>${sourcePerson?'Selected person: '+esc(profile(sourcePerson.id)?.name||'Source person'):'Choose the person you believe is shown in this photo.'}</p><button class="secondary" data-return-photo="${esc(p.id)}">Back to photo</button> <button class="text-button" data-end-connection="true">Stop connecting</button></div>`:'';
+    renderConnectionWorkflow();
   }
   function renderSourcePeople(){
     if(!sourceDoc)return;
@@ -169,6 +177,7 @@
   }
   function renderSourceReview(){
     const person=sourcePerson&&profile(sourcePerson.id),p=connectionPhoto&&(drafts.get(connectionPhoto)||records.get(connectionPhoto));
+    renderConnectionWorkflow();$('#reviewSavedConnection').hidden=!connectionSaved||!p||restricted(p);$('#reviewSavedConnection').disabled=saving;
     $('#sourcePersonReview').hidden=!person;if(!person)return;
     $('#sourcePersonReviewTitle').textContent=person.name;
     const blocked=person.restricted&&!app()?.showLiving||p&&restricted(p);
@@ -191,7 +200,7 @@
     const person=profile(id),doc=window.SourceDocuments.source(app()?.documents||[],reportId,Number(page));
     if(!person||!doc||doc.page!==Number(page)||!window.SourceDocuments.people([person],doc).length)return;
     if(sourceDoc?.id!==doc.id||sourceDoc?.page!==doc.page)app().openSource(doc.id,doc.page);
-    sourcePerson={id,reportId:doc.id,page:doc.page};$('#sourceConnectionNote').value='';$('#sourceConnectionStatus').textContent='';renderSourceReview();$('#sourcePersonReviewTitle').focus({preventScroll:true});$('#sourcePersonReview').scrollIntoView({block:'nearest',behavior:'smooth'});
+    sourcePerson={id,reportId:doc.id,page:doc.page};connectionSaved=false;$('#sourceConnectionNote').value='';$('#sourceConnectionStatus').textContent='';renderSourceContext();renderSourceReview();$('#sourcePersonReviewTitle').focus({preventScroll:true});$('#sourcePersonReview').scrollIntoView({block:'nearest',behavior:'smooth'});
   }
   async function saveSourceConnection(){
     if(saving||!sourcePerson||connectionPhoto!==selected||!current())return;
@@ -204,7 +213,7 @@
     $('#sourceConnectionStatus').textContent='Saving connection and page citation…';
     const pending=sourcePerson,photoId=selected,promise=save();renderSourceReview();
     const saved=await promise;
-    if(sourcePerson===pending&&connectionPhoto===photoId){$('#sourceConnectionStatus').textContent=saved?'Connection saved as a proposal with its source-page citation. Return to the photograph to review or confirm it.':$('#photoSaveStatus').textContent;renderSourceReview();renderSourceContext();}
+    if(sourcePerson===pending&&connectionPhoto===photoId){connectionSaved=saved;$('#sourceConnectionStatus').textContent=saved?'Connection saved. The person and source page are linked to your photo. Review the evidence before confirming the identity.':$('#photoSaveStatus').textContent;renderSourceReview();renderSourceContext();}
   }
   function sourceChanged(doc){cancelDrawing();sourceDoc=doc;clearSourceChoice();peopleLimit=30;$('#citeSourcePhoto').hidden=!selected;$('#sourcePersonHotspots').innerHTML='';if(doc){renderSourcePeople();loadSourceMap();}}
   $('#connectPhotoSource').addEventListener('click',()=>beginSourceConnection(selected));
@@ -213,6 +222,8 @@
   $('#sourcePeopleMore').addEventListener('click',()=>{peopleLimit+=30;renderSourcePeople();});
   $('#sourcePeopleMarkers').addEventListener('change',renderSourcePeople);
   $('#saveSourceConnection').addEventListener('click',saveSourceConnection);
+  $('#sourceConnectionNote').addEventListener('input',()=>{if(connectionSaved){connectionSaved=false;$('#sourceConnectionStatus').textContent='Comment changed. Save again to keep it.';renderSourceReview();}});
+  $('#reviewSavedConnection').addEventListener('click',()=>{if(saving||!connectionPhoto||!connectionSaved)return;selectPhoto(connectionPhoto);$('#photoClaims').scrollIntoView({block:'center',behavior:'smooth'});$('#photoClaims').focus({preventScroll:true});});
   function profileChanged(person){selectedTreePerson=person;$('#linkTreePerson').hidden=!selected;}
   $('#linkTreePerson').addEventListener('click',()=>{const person=selectedTreePerson||app()?.selectedProfile;if(!selected||!person)return;selectPhoto(selected);propose(person.id);});
   $('#choosePersonTree').addEventListener('click',()=>{pullFields();profileChanged(app()?.selectedProfile);});

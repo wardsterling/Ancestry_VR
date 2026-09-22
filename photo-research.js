@@ -67,7 +67,7 @@
   }
   function connectSourcePerson(photo,person,source,note,ids,catalog={}){
     if(!person?.id||!source||(person.sources||[]).every(s=>s.reportId!==source.id||s.page!==source.page))throw Error('Choose a person cited on this source page.');
-    const explanation=clean(note);if(!explanation)throw Error('Explain why this source person may be in the photograph.');
+    const explanation=clean(note)||'Person selected by the curator from this source page; no comment added.';
     // Work on a copy: failed validation must leave the curator’s existing draft intact.
     const value=validate(photo,catalog);
     let claim=value.claims.find(c=>c.profileId===person.id&&c.status!=='rejected');

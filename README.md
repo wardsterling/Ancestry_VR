@@ -72,11 +72,15 @@ A curator can add or adjust boxes with two corner taps and numeric coordinates.
 No face recognition, face embeddings, biometric matching, or appearance-based identity
 inference is used.
 
+The visible three-step guide follows **Choose a photo → Choose a source person → Save connection**.
+It highlights your current step and offers **Review saved connection** after saving.
 From **Awaiting identification**, choose **Connect to source person**. Open the
 photograph's report or another report, then tap a highlighted printed name or select
 from **People in this source**. Search the current page or the whole report; each
 result links to the existing tree and retains its exact citation. Same-name records
-remain separate choices. Explain the written evidence, then **Save proposed connection**.
+remain separate choices. Add an optional comment about how you know the person, then **Save proposed connection**.
+If you already know the connection, leave the comment blank; the person and exact
+report/page are still saved, with no claim that a caption or other explanation was supplied.
 The private notebook saves the person and report/page citation together; review the
 proposal there before explicitly confirming it. Group photographs can connect to
 more than one person. Retry preserves drafts without duplicating the same connection.
