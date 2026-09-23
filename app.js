@@ -13,6 +13,7 @@
     views.forEach(v => v.classList.toggle('active', v.id === id));
     $$('.nav-button').forEach(b => b.classList.toggle('active', b.dataset.nav === name));
     if(!alreadyActive)window.scrollTo({ top: 0, behavior: 'smooth' });
+    if(name==='wall')window.WallMatches?.refresh();
     if (name === 'conversation' && !$('#messages').children.length) addGuide("Hello. I’m the family-history guide for Howard Pearson Kennedy. I answer from reviewed sources and tell you when the archive does not know. What would you like to explore?", false);
   }
 

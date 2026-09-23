@@ -15,7 +15,9 @@ export async function handlePhotoAugments(request,env){
   try{
     if(!env.DB||!env.ARCHIVE_FILES)throw Error('Close-up storage unavailable.');
     if(request.method==='GET'&&!id){
-      const photoId=url.searchParams.get('photo');if(!rules.idPattern.test(photoId||''))throw augmentError('Select a picture.');
+      const photoId=url.searchParams.get('photo');
+      if(photoId===null){const rows=await env.DB.prepare('SELECT * FROM photo_augments WHERE owner_id = ? AND deleted = 0 ORDER BY photo_id, created_at, id').bind(owner).all();return augmentJson({augments:rows.results.map(augmentPublic)});}
+      if(!rules.idPattern.test(photoId||''))throw augmentError('Select a picture.');
       const rows=await env.DB.prepare('SELECT * FROM photo_augments WHERE owner_id = ? AND photo_id = ? AND deleted = 0 ORDER BY created_at, id').bind(owner,photoId).all();return augmentJson({augments:rows.results.map(augmentPublic)});
     }
     if(!id)return augmentJson({error:'Choose a close-up.'},404);

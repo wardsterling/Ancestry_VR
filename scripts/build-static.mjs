@@ -3,6 +3,7 @@ import {copyFile,cp,mkdir,access,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {buildImportRuntime} from './build-import-runtime.mjs';
+import {buildPhotoMatcher} from './build-photo-matcher.mjs';
 import SourceDocuments from '../source-viewer.js';
 const root=process.cwd(),output=process.argv.includes('--site')?'dist/client':'dist';
 let archive;
@@ -28,6 +29,8 @@ if(archive?.schemaVersion>=2){
 if(!archive){for(const file of ['source-people.json','dist/source-people.json','dist/client/source-people.json','archive-private-details.json','assets/report-portraits','source-documents','source-pages','wall-catalog.json','dist/client/archive-data.json','dist/archive-private-details.json','dist/assets/report-portraits','dist/source-documents']){let found=false;try{await access(path.join(root,file));found=true;}catch{}if(found)throw Error('Private source media is present. Use a clean code-only checkout for a public build.');}}
 const files=['photo-augment-rules.js','photo-similarity.js','wall-identification.js','wall-identification.css','source-attributes.js','person-statistics.js','person-insights.js','person-insights.css','index.html','styles.css','archive.css','archive-explorer.css','report-edition.css','photo-workspace.css','photo-research.js','photo-workspace.js','archive-import.js','archive-import-rules.js','pdf-import.mjs','report-parser-worker.mjs','archive-items.js','archive-intake.js','archive-intake.css','archive-model.js','archive-privacy.js','source-viewer.js','profile-presentation.js','archive-explorer.js','app.js','search-engine.js','search-ui.js','data.js','manifest.webmanifest','sw.js'];
 await mkdir(path.join(root,output),{recursive:true});
+for(const file of ['archive-session.js','photo-match-rules.js','photo-matcher.js','wall-matches.js'])await copyFile(path.join(root,file),path.join(root,output,file));
+await buildPhotoMatcher(path.join(root,output));
 for(const file of files)await copyFile(path.join(root,file),path.join(root,output,file));
 await buildImportRuntime(path.join(root,output),archive);
 await cp(path.join(root,'assets'),path.join(root,output,'assets'),{recursive:true});

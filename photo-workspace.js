@@ -6,7 +6,7 @@
   const uid=prefix=>prefix+'-'+crypto.randomUUID();
   const app=()=>window.ArchiveApp;
   const records=new Map(),drafts=new Map();
-  let selected=null,ready=false,dirty=false,saving=false,unknownLimit=16,sourceDrawing=false,wallDrawing=false,firstPoint=null,scale=1,sourceDoc=null,selectedTreePerson=null;
+  let selected=null,ready=false,notebookLoaded=false,dirty=false,saving=false,unknownLimit=16,sourceDrawing=false,wallDrawing=false,firstPoint=null,scale=1,sourceDoc=null,selectedTreePerson=null;
   let connectionPhoto=null,sourcePerson=null,sourceChoiceIds=null,peopleLimit=30,sourceMap=null,sourceMapState='idle',connectionSaved=false;
   const catalog=()=>({documents:app()?.documents||[],profileIds:(app()?.profiles||[]).map(p=>p.id),profileAliases:app()?.profileAliases||{}});
   const current=()=>drafts.get(selected)||records.get(selected);
@@ -89,7 +89,7 @@
     pullFields();let value;
     try{value={...rules.validate(current(),catalog()),revision:current().revision||0};}catch(e){message(e.message,true);return false;}
     saving=true;$('#photoResearchEditor').querySelectorAll('input,select,textarea,button').forEach(node=>node.disabled=true);message('Saving…');
-    try{const response=await fetch('/api/photo-research/'+encodeURIComponent(value.id),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(value)});const data=await response.json();if(!response.ok)throw Error(data.error||'Could not save.');records.set(value.id,data.record);drafts.set(value.id,structuredClone(data.record));if(selected===value.id){dirty=false;message('Saved to your private notebook.');}renderRegions();return true;}
+    try{const response=await fetch('/api/photo-research/'+encodeURIComponent(value.id),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(value)});const data=await response.json();if(!response.ok)throw Error(data.error||'Could not save.');records.set(value.id,data.record);drafts.set(value.id,structuredClone(data.record));if(selected===value.id){dirty=false;message('Saved to your private notebook.');}renderRegions();window.WallMatches?.changed();return true;}
     catch(e){message((e.message==='Unexpected token'?'The notebook could not be reached.':e.message)+' Your draft has been kept on this page.',true);return false;}
     finally{saving=false;$('#photoResearchEditor').querySelectorAll('input,select,textarea,button').forEach(node=>node.disabled=restricted(current()));}
   }
@@ -278,12 +278,12 @@
     pullFields();const photoId=selected,prior=structuredClone(current());
     try{const value=rules.connectSourcePerson(current(),person,doc,note,{claimId:uid('claim'),evidenceId:uid('evidence')},catalog());if(confirmed)value.claims.find(c=>c.profileId===personId&&c.status!=='rejected').status='confirmed';drafts.set(photoId,value);dirty=true;renderEditor();const ok=await save();if(!ok){drafts.set(photoId,prior);dirty=JSON.stringify(prior)!==JSON.stringify(records.get(photoId));}if(selected===photoId)renderEditor();return ok;}catch(e){message(e.message,true);return false;}
   }
-  window.PhotoWorkspace={get selected(){return current();},get photos(){return [...records.values()];},get busy(){return saving;},ensureSaved:save,connectInline,selectPhoto,startWallDrawing,exportNotebook,importNotebook,archiveChanged,profileChanged,sourceChanged};
+  window.PhotoWorkspace={get ready(){return ready&&notebookLoaded;},get selected(){return current();},get photos(){return [...records.values()];},get busy(){return saving;},ensureSaved:save,connectInline,selectPhoto,startWallDrawing,exportNotebook,importNotebook,archiveChanged,profileChanged,sourceChanged};
   async function load(){
     const results=await Promise.allSettled([fetch('wall-catalog.json',{cache:'no-store'}).then(async r=>r.ok?(await r.json()).regions:[]),fetch('/api/photo-research',{cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Saved research is unavailable. Try reloading; unsaved drafts can be exported.');return (await r.json()).records;})]);
     if(results[0].status==='fulfilled')for(const p of results[0].value||[])records.set(p.id,p);
-    if(results[1].status==='fulfilled'){for(const p of results[1].value||[])records.set(p.id,p);$('#notebookConnection').textContent='Your private notebook · saved across sessions';}else{$('#notebookConnection').textContent='Saved research is unavailable. Reload to reconnect; you can export drafts.';$('#notebookConnection').className='notebook-error';}
-    ready=true;renderRegions();archiveChanged();restore();
+    if(results[1].status==='fulfilled'){notebookLoaded=true;for(const p of results[1].value||[])records.set(p.id,p);$('#notebookConnection').textContent='Your private notebook · saved across sessions';}else{$('#notebookConnection').textContent='Saved research is unavailable. Reload to reconnect; you can export drafts.';$('#notebookConnection').className='notebook-error';}
+    ready=true;renderRegions();archiveChanged();restore();window.WallMatches?.refresh();
   }
   load();
 })();

@@ -40,3 +40,12 @@ export const photoAugments = sqliteTable('photo_augments', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, table => [primaryKey({ columns: [table.ownerId, table.id] }), index('photo_augments_owner_photo').on(table.ownerId, table.photoId, table.deleted)]);
+
+// Suggestions are separate from confirmed genealogy and scoped to the privacy view.
+export const photoMatches = sqliteTable('photo_matches', {
+  ownerId: text('owner_id').notNull(),
+  photoId: text('photo_id').notNull(),
+  scope: text('scope').notNull(),
+  body: text('body').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, table => [primaryKey({ columns: [table.ownerId, table.photoId, table.scope] })]);

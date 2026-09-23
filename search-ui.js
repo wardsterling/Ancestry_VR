@@ -172,7 +172,7 @@
     renderSourceLists();
     $('#pilotOriginalSource').hidden=!documents.some(d=>d.id==='brimage-gatling');
     const gallerySource=$('#portraitSource').value;$('#portraitSource').innerHTML='<option value="">All reports</option>'+facets.sources.map(s=>`<option value="${escape(s.id)}">${escape(s.title)}</option>`).join('');$('#portraitSource').value=gallerySource;
-    renderGallery();window.PersonInsights?.refresh();window.PhotoWorkspace?.archiveChanged();window.ArchiveItems?.archiveChanged();
+    renderGallery();window.PersonInsights?.refresh();window.PhotoWorkspace?.archiveChanged();window.WallMatches?.refresh();window.ArchiveItems?.archiveChanged();
   }
   async function toggleLiving(){
     const revision=++toggleRevision,wanted=$('#showLiving').checked;
@@ -302,7 +302,7 @@
       loadError=error.message==='signin'?'Sign in again to load the current saved archive.':error.message==='missing'?'The public code does not include family data. The full archive is available only in the private Sites preview.':'The archive could not be loaded. Check your connection, then try again.';
       ['profileMetric','placeMetric','reportMetric','restrictedMetric'].forEach(id=>$('#'+id).textContent='—');
     } finally {
-      clearTimeout(timer);loading=false;window.PersonInsights?.refresh();window.ArchiveImport?.queue();if(location.hash.startsWith('#archive'))restoreRoute();else runSearch();controllers.filter(c=>document.activeElement===c.input).forEach(c=>c.refresh());
+      clearTimeout(timer);loading=false;window.WallMatches?.refresh();window.PersonInsights?.refresh();window.ArchiveImport?.queue();if(location.hash.startsWith('#archive'))restoreRoute();else runSearch();controllers.filter(c=>document.activeElement===c.input).forEach(c=>c.refresh());
     }
   }
   setScope('all');loadArchive();

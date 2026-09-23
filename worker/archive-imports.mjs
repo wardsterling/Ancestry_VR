@@ -7,7 +7,7 @@ export async function archiveState(env,owner){
   if(!owner)return null;const row=(await env.DB.prepare('SELECT body, revision FROM archive_state WHERE owner_id = ?').bind(owner).all()).results[0];
   return row?{...JSON.parse(row.body),revision:row.revision}:null;
 }
-export async function archiveCatalog(env,owner,base){const state=await archiveState(env,owner);return state?.catalog||base;}
+export async function archiveCatalog(env,owner,base){const state=await archiveState(env,owner);return state?{...state.catalog,snapshotId:state.parts.archive.split('/')[2]}:base;}
 // Browser reads use /api/archive so deployed static assets cannot bypass live state.
 export async function archivePart(request,env){
   const url=new URL(request.url),legacy={'/archive-data.json':'archive','/archive-tree.json':'tree','/archive-private-details.json':'privateDetails','/source-people.json':'sourcePeople'};

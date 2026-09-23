@@ -97,7 +97,7 @@ The wall supports button/range zoom, touch pinch, drag to pan, keyboard navigati
 and a fit-to-wall reset. Select a picture boundary or use the accessible picture list.
 Private `wall-catalog.json` defines normalized image regions, never facial identities.
 A curator can add or adjust boxes with two corner taps and numeric coordinates.
-No face recognition, face embeddings, biometric matching, or appearance-based identity
+Automatic wall suggestions now include local face comparison, with explicit review. No automatic identity
 inference is used.
 
 The visible three-step guide follows **Choose a photo → Choose a source person → Save connection**.
@@ -331,7 +331,7 @@ same-origin PDF.js reader produces page text, previews and image regions; Pyodid
 `extract_reports.py`, the same parser used for the original reports. Each import reparses
 all incorporated report text, resolves evidence-supported duplicates, validates family
 links, retains stable profile URLs, and attaches portraits using adjacent printed names.
-No face recognition or external extraction service is used. Same-photograph retrieval can suggest source-photo copies for curator confirmation. Keep the Site open while
+PDF extraction does not use face recognition or an external extraction service. The separate wall matcher produces photo and face suggestions for curator review. Keep the Site open while
 processing. Errors offer a retry without re-uploading the original. Unsupported/scanned
 layouts remain saved sources and require transcription; they cannot overwrite the archive.
 
@@ -426,19 +426,35 @@ retries with identical bytes are idempotent. Removing a close-up hides it atomic
 before removing its stored bytes. Applied migrations remain unchanged; migration
 0003 adds the working-image table and its owner/photo index.
 
-An enabled close-up starts a same-photograph search after saving. Comparisons happen
-in the browser against visible source portraits and registered source-picture crops,
-using normalized luminance, a perceptual hash and spatial correlation. A bounded
-four-image fetch queue, reusable descriptors and a Stop search control keep the
-comparison usable. Changes to privacy, source snapshot or selected photograph cancel
-stale results. Blank/low-detail images do not produce matches. Results offer source
-pages and person choices; no match automatically assigns a name or removes a picture
-from Awaiting identification.
+Opening Explore Wall starts an automatic queue for pictures awaiting identification.
+The queue uses the original wall crop until an enabled close-up is available. Saving,
+editing, excluding or removing close-ups and incorporating reports invalidates stale
+suggestions. Progress, unavailable-source errors, and saved suggestions appear directly
+below the wall; select a suggestion to review its person and original source page.
+The Scan automatically switch pauses/resumes work. Keep the page open for processing.
 
-This is photo-copy retrieval, **not facial recognition**: it does not recognize the
-same person in different photographs, create biometric embeddings, or send images
-to an external recognition service. Low-resolution, glare-heavy or heavily altered
-copies can produce no result or a wrong suggestion. Confirm the source identity.
-Close-up originals and saved notebook data are private Site runtime data, never part
-of the public code repository. Notebook JSON exports contain photo research only;
-close-up image bytes remain in private storage.
+Comparisons run locally in the browser: same-photo retrieval uses perceptual hashes
+and luminance correlation; face comparison uses the pinned MIT-licensed
+`@vladmandic/face-api` 1.7.15 package. The build self-hosts its browser bundle and only
+SSD face detection, landmarks and face-description weights. No images or descriptors
+are sent to an outside recognition service. Face descriptors stay in memory. A face
+resemblance is a review suggestion, never an identity assertion. Group-source faces
+lead to the source page without automatically assigning a profile name. Glare, small
+faces, age differences and historical image quality can prevent or mislead matching.
+
+Migration 0004 adds `photo_matches`. Suggestions persist in private D1 under the
+stable signed-in owner and privacy scope, separately from genealogy and confirmed
+notebook records. Each result includes a fingerprint of source snapshot, source
+candidates, crop and close-up revisions, so reloads reuse current results and changed
+inputs are compared again. Living-person toggles clear incompatible in-memory results.
+Confirmation remains explicit; a machine suggestion never removes an unknown person.
+
+Private builds first resolve `/api/session` before loading owner-scoped records.
+Transient missing identity gets bounded retries; the top-level browser can initiate
+one dispatch-owned ChatGPT sign-in. Repeated failure displays a reconnect action,
+without redirect loops, email-based ownership fallbacks or access-policy changes.
+Mid-session expiration preserves unsaved drafts and asks the user to reconnect.
+
+Close-up images, archive data and saved suggestions stay in the private Site. GitHub
+contains code, schemas, model dependency declarations and tests only. Existing notebook
+exports contain photo research; close-ups and machine suggestions remain in storage.
