@@ -15,7 +15,7 @@ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=fs.readFileSync(path.join(__dirname,'../search-ui.js'),'utf8');
 const fixture={profiles:[{id:'synthetic',name:'Example Test Person',aliases:['Tester'],birthYear:1800,deathYear:1870,
   years:['1800','1870'],places:['Demo City, VA'],facts:['Synthetic statement only.'],sources:[{reportId:'demo',title:'Synthetic report',page:1}],restricted:false}]};
-async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null,itemData=null,insightData=null) {
+async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null,itemData=null,insightData=null,wallData=null) {
   const nodes=new Map(), scopes=[];
   class Element {
     constructor(id,tag='DIV'){this.id=id;this.tagName=tag;this.value='';this.checked=false;this.hidden=false;this.open=false;this.textContent='';this.dataset={};this.attributes={};this.handlers={};this.options=[];this.selectedIndex=0;this.classList={toggle(){}};this.style={setProperty(){}};this.classList={toggle(){},add(){},remove(){}};this.scrollLeft=0;this.scrollTop=0;this.clientWidth=1000;this.clientHeight=400;nodes.set(id,this);}
@@ -48,10 +48,11 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   const location={hash,href:'https://example.test/'+hash};
   const history={pushState(a,b,url){location.hash=url;location.href='https://example.test/'+url;},replaceState(a,b,url){this.pushState(a,b,url);}};
   const events={};
-  const window={SourceAttributes:require('../source-attributes'),PersonStatistics:require('../person-statistics'),PhotoResearch,ArchiveItemRules,innerWidth:1400,confirm:()=>true,FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
+  const window={PhotoAugmentRules:require('../photo-augment-rules'),PhotoSimilarity:require('../photo-similarity'),SourceAttributes:require('../source-attributes'),PersonStatistics:require('../person-statistics'),PhotoResearch,ArchiveItemRules,innerWidth:1400,confirm:()=>true,FamilySearch,ArchiveModel,ProfilePresentation,ArchivePrivacy,SourceDocuments,matchMedia:()=>({matches:false}),addEventListener(type,fn){(events[type]||=[]).push(fn);},LFW:{notify(){},showView:view=>{navigation.push(view);if(!location.hash.startsWith('#'+view))history.pushState(null,'','#'+view);}}};
   const metadata=treeData||{snapshotId:archive.snapshotId,memberships:[{profileId:'synthetic',reportId:'demo',generation:2,page:1}],edges:[]};
   const photoSaved=[],photoRequests=[],itemSaved=[];
   const fetcher=async (url,options={})=>{
+    if(url.startsWith('/api/photo-augments'))return {ok:true,json:async()=>({augments:wallData?.augments||[]})};
     if(url==='/api/archive/inputs')return {ok:!insightData?.failure,json:async()=>({snapshotId:archive.snapshotId,inputs:insightData?.inputs||{}})};
     if(url.startsWith('/api/archive/'))url=({'/api/archive/archive':'archive-data.json','/api/archive/tree':'archive-tree.json','/api/archive/privateDetails':'archive-private-details.json','/api/archive/sourcePeople':'source-people.json'})[url.split('?')[0]]||url;
     if(url.startsWith('/api/archive-items')){if(options.method==='PUT'){if(itemData?.saveFailure)return {ok:false,json:async()=>({error:'Synthetic item storage failure'})};const item={...JSON.parse(options.body.get('metadata')),revision:1,updatedAt:'2026-01-01T00:00:00Z',createdAt:'2026-01-01T00:00:00Z'};itemSaved.push(item);return {ok:true,json:async()=>({item})};}return {ok:true,json:async()=>({items:itemData?.saved||[]})};}
@@ -64,6 +65,7 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-explorer.js'),'utf8'),context);
   vm.runInContext(script,context);
   if(photoData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../photo-workspace.js'),'utf8'),context);
+  if(wallData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../wall-identification.js'),'utf8'),context);
   if(insightData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../person-insights.js'),'utf8'),context);
   if(itemData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-intake.js'),'utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
@@ -336,4 +338,25 @@ test('unavailable statement inputs show unavailable counts rather than fabricate
  const result=await setup(false,'#insights?by=education&education=Bachelor',false,{...fixture,snapshotId:'synthetic'},null,null,null,null,{failure:true});
  await new Promise(resolve=>setImmediate(resolve));
  assert.match(result.nodes.get('insightStatus').textContent,/unavailable/);assert.match(result.nodes.get('insightPeopleTitle').textContent,/—/);assert.equal(result.nodes.get('insightRetry').hidden,false);
+});
+test('wall identification stays beside the selected picture and saves a confirmed person with its source',async()=>{
+ const archive={...fixture,documents:[{id:'demo',title:'Synthetic report',pages:1,url:'source-documents/demo.pdf'}]};
+ const app=await setup(false,'#wall?photo=wall-example',false,archive,null,null,{regions:[samplePhoto]},null,null,{});await tick();
+ app.nodes.get('identifySearch').value='Example';app.nodes.get('identifySearch').emit('input');assert.match(app.nodes.get('identifyCandidates').innerHTML,/Example Test Person/);
+ clickDataset(app,'identifyPerson','synthetic');app.nodes.get('identifyCitation').value='demo|1';assert.equal(app.nodes.get('identifyReview').hidden,false);
+ app.nodes.get('confirmWallIdentity').emit('click');await tick();
+ assert.equal(app.photoSaved.length,1);assert.equal(app.photoSaved[0].claims[0].status,'confirmed');assert.equal(app.photoSaved[0].evidence[0].reportId,'demo');assert.equal(app.photoSaved[0].evidence[0].page,1);assert.equal(app.navigation.at(-1),'wall');assert.match(app.nodes.get('identifyStatus').textContent,/Identity confirmed/);assert.match(app.nodes.get('unknownPortraitSummary').textContent,/0 photographs/);
+});
+test('failed inline identification retains the choice and keeps the photograph unidentified',async()=>{
+ const archive={...fixture,documents:[{id:'demo',title:'Synthetic report',pages:1,url:'source-documents/demo.pdf'}]};
+ const app=await setup(false,'#wall?photo=wall-example',false,archive,null,null,{regions:[samplePhoto],saveFailure:true},null,null,{});await tick();
+ clickDataset(app,'identifyPerson','synthetic');app.nodes.get('identifyCitation').value='demo|1';app.nodes.get('identifyComment').value='Optional family comment';app.nodes.get('confirmWallIdentity').emit('click');await tick();
+ assert.equal(app.photoSaved.length,0);assert.match(app.nodes.get('identifyStatus').textContent,/not saved/);assert.equal(app.nodes.get('identifyComment').value,'Optional family comment');assert.match(app.nodes.get('unknownPortraitSummary').textContent,/1 photographs/);assert.equal(app.window.PhotoWorkspace.selected.claims.length,0);
+});
+test('picture-number switch is independent of outlines and close-ups follow living privacy',async()=>{
+ const saved={...samplePhoto,revision:1,claims:[{id:'claim1',profileId:'synthetic',label:'',status:'proposed',evidenceIds:[]}]};
+ const app=await setup(false,'#wall?photo=wall-example',false,{profiles:[{...fixture.profiles[0],restricted:true}]},null,null,{regions:[samplePhoto],saved:[saved]},null,null,{});await tick();
+ assert.equal(app.nodes.get('wallIdentify').hidden,true);assert.equal(app.nodes.get('photoAugments').hidden,true);
+ const changes=[];app.nodes.get('wallRegions').classList.toggle=(name,value)=>changes.push({name,value});app.nodes.get('wallNumbers').checked=true;app.nodes.get('wallNumbers').emit('change');app.nodes.get('wallMarkers').checked=false;app.nodes.get('wallMarkers').emit('change');
+ assert.deepEqual(changes,[{name:'hide-numbers',value:false},{name:'hide-outlines',value:true}]);
 });

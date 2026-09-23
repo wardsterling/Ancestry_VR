@@ -331,7 +331,7 @@ same-origin PDF.js reader produces page text, previews and image regions; Pyodid
 `extract_reports.py`, the same parser used for the original reports. Each import reparses
 all incorporated report text, resolves evidence-supported duplicates, validates family
 links, retains stable profile URLs, and attaches portraits using adjacent printed names.
-No face recognition or external extraction service is used. Keep the Site open while
+No face recognition or external extraction service is used. Same-photograph retrieval can suggest source-photo copies for curator confirmation. Keep the Site open while
 processing. Errors offer a retry without re-uploading the original. Unsupported/scanned
 layouts remain saved sources and require transcription; they cannot overwrite the archive.
 
@@ -404,3 +404,41 @@ an owner's saved records. A missing session shows a top-level sign-in link.
 Archive metrics use current records and documents, while the tree labels report
 matches and foreground-generation counts separately. New imports appear in these
 views after the shared archive reload without changing any report-count constants.
+
+
+## Wall identification and private close-ups
+
+Select a wall picture, search a name, review its report/page, then use **Confirm person
+& link source**. The optional comment and page citation save together. **Save for
+further review** keeps the identity proposed; **Other people are still unknown** keeps
+a group picture in Awaiting identification. The existing notebook remains under
+Notes, boundaries and other evidence. Source-page browsing is still available.
+Picture numbers and outlines now have independent switches; the number preference
+is device-local and never alters photograph IDs.
+
+**Clearer close-ups** accepts a camera capture or an uploaded image. The browser
+normalizes it to JPEG (up to 4096 pixels per side), removing file metadata, and saves
+it privately in R2. D1 `photo_augments` records ownership, the selected photograph,
+crop, quarter-turn rotation, inclusion setting and revision. A close-up can be edited,
+excluded or removed without replacing the wall photograph or changing its identities.
+The API checks ownership and same-origin writes; stale edits are rejected and upload
+retries with identical bytes are idempotent. Removing a close-up hides it atomically
+before removing its stored bytes. Applied migrations remain unchanged; migration
+0003 adds the working-image table and its owner/photo index.
+
+An enabled close-up starts a same-photograph search after saving. Comparisons happen
+in the browser against visible source portraits and registered source-picture crops,
+using normalized luminance, a perceptual hash and spatial correlation. A bounded
+four-image fetch queue, reusable descriptors and a Stop search control keep the
+comparison usable. Changes to privacy, source snapshot or selected photograph cancel
+stale results. Blank/low-detail images do not produce matches. Results offer source
+pages and person choices; no match automatically assigns a name or removes a picture
+from Awaiting identification.
+
+This is photo-copy retrieval, **not facial recognition**: it does not recognize the
+same person in different photographs, create biometric embeddings, or send images
+to an external recognition service. Low-resolution, glare-heavy or heavily altered
+copies can produce no result or a wrong suggestion. Confirm the source identity.
+Close-up originals and saved notebook data are private Site runtime data, never part
+of the public code repository. Notebook JSON exports contain photo research only;
+close-up image bytes remain in private storage.

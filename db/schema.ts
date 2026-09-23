@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, index } from 'drizzle-orm/sqlite-core';
 
 // Each curator owns an evidence notebook. Geometry refers to original image coordinates.
 export const photoResearch = sqliteTable('photo_research', {
@@ -27,3 +27,16 @@ export const archiveState = sqliteTable('archive_state', {
   revision: integer('revision').notNull().default(1),
   updatedAt: text('updated_at').notNull(),
 });
+
+// Clearer working images stay separate from wall originals and archive collections.
+export const photoAugments = sqliteTable('photo_augments', {
+  ownerId: text('owner_id').notNull(),
+  id: text('id').notNull(),
+  photoId: text('photo_id').notNull(),
+  objectKey: text('object_key').notNull(),
+  body: text('body').notNull(),
+  revision: integer('revision').notNull().default(1),
+  deleted: integer('deleted').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, table => [primaryKey({ columns: [table.ownerId, table.id] }), index('photo_augments_owner_photo').on(table.ownerId, table.photoId, table.deleted)]);

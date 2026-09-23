@@ -43,7 +43,7 @@
     const scope=$('#unknownPortraitSource').value||'all';
     const photos=[...records.values()].filter(p=>rules.awaitingIdentification(p,catalog())&&(scope==='all'||scope===p.kind)&&!restricted(p));
     $('#unknownPortraitSummary').textContent=photos.length+' photographs awaiting identification';
-    $('#unknownPortraits').innerHTML=photos.slice(0,unknownLimit).map(p=>`<article class="unidentified-card"><button data-photo-id="${esc(p.id)}">${crop(p)}<strong>${esc(p.title)}</strong><small>${p.kind==='wall'?'Wall photograph':'Report · page '+p.page} · ${photoStatus(p)}</small></button><button class="connect-source-button" data-connect-source-photo="${esc(p.id)}">Connect to source person →</button></article>`).join('')||'<p>No unidentified photographs in this selection. Use “Mark unidentified portrait” on any report page to add one.</p>';
+    $('#unknownPortraits').innerHTML=photos.slice(0,unknownLimit).map(p=>`<article class="unidentified-card"><button data-photo-id="${esc(p.id)}">${crop(p)}<strong>${esc(p.title)}</strong><small>${p.kind==='wall'?'Wall photograph':'Report · page '+p.page} · ${photoStatus(p)}</small></button><button class="connect-source-button" data-connect-source-photo="${esc(p.id)}">Identify this picture →</button></article>`).join('')||'<p>No unidentified photographs in this selection. Use “Mark unidentified portrait” on any report page to add one.</p>';
     $('#moreUnknownPortraits').hidden=photos.length<=unknownLimit;
     const connected=[...records.values()].filter(p=>!rules.awaitingIdentification(p,catalog())&&(scope==='all'||scope===p.kind)&&!restricted(p));
     $('#connectedPortraitSummary').textContent=connected.length+' connected photographs';
@@ -72,9 +72,10 @@
     $('#candidateTools').hidden=hidden;$('#evidenceTools').hidden=hidden;
     renderClaims();renderCandidates();
     message(hidden?'Living-person research is hidden. Turn on living-person details to edit.':dirty?'Unsaved changes. Save to keep these notes.':p.revision?'Saved privately · revision '+p.revision:'Unidentified region. Add evidence and save your research.');
-    $('#citeSourcePhoto').hidden=false;
+    $('#citeSourcePhoto').hidden=false;window.WallIdentification?.photoChanged(p,hidden);
   }
   function selectPhoto(id,push=true){
+    if(id!==selected&&window.WallIdentification&&!window.WallIdentification.allowLeave())return;
     if(saving){notify('Please wait for this photograph to finish saving.');return;}
     if(!records.has(id)&&!drafts.has(id)){if(ready)notify('This photograph is not in your notebook.');return;}
     allowLeave();selected=id;dirty=drafts.has(id)&&JSON.stringify(drafts.get(id))!==JSON.stringify(records.get(id));if(!drafts.has(id))drafts.set(id,structuredClone(records.get(id)));
@@ -134,6 +135,9 @@
   viewport.addEventListener('keydown',e=>{if(e.key==='+'||e.key==='='){e.preventDefault();zoom(scale+.25);}if(e.key==='-'){e.preventDefault();zoom(scale-.25);}if(e.key==='0'){e.preventDefault();zoom(1);}if(e.key==='Escape')cancelDrawing();if(e.target===viewport&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();viewport.scrollBy({left:e.key==='ArrowRight'?100:e.key==='ArrowLeft'?-100:0,top:e.key==='ArrowDown'?100:e.key==='ArrowUp'?-100:0});}});
   $('#wallZoomIn').addEventListener('click',()=>zoom(scale+.25));$('#wallZoomOut').addEventListener('click',()=>zoom(scale-.25));$('#wallFit').addEventListener('click',()=>{zoom(1);viewport.scrollTo(0,0);});$('#wallZoom').addEventListener('input',e=>zoom(Number(e.target.value)/100));
   $('#wallMarkers').addEventListener('change',e=>$('#wallRegions').classList.toggle('hide-outlines',!e.target.checked));
+  try{$('#wallNumbers').checked=localStorage.getItem('wall-picture-numbers')==='on';}catch{}
+  const showNumbers=()=>{$('#wallRegions').classList.toggle('hide-numbers',!$('#wallNumbers').checked);try{localStorage.setItem('wall-picture-numbers',$('#wallNumbers').checked?'on':'off');}catch{}};
+  $('#wallNumbers').addEventListener('change',showNumbers);showNumbers();
   function drawBox(id,a,b){const node=$('#'+id);node.hidden=false;node.style.left=Math.min(a.x,b.x)+'%';node.style.top=Math.min(a.y,b.y)+'%';node.style.width=Math.abs(a.x-b.x)+'%';node.style.height=Math.abs(a.y-b.y)+'%';}
   function cancelDrawing(){wallDrawing=false;sourceDrawing=false;firstPoint=null;canvas.classList.remove('is-drawing');$('#sourcePageCanvas').classList.remove('is-drawing');$('#wallDraftRect').hidden=true;$('#sourceDraftRect').hidden=true;$('#addWallPhoto').textContent='Mark a picture';$('#markSourcePhoto').textContent='Mark unidentified portrait';$('#wallHint').textContent='Pinch or use + / − to zoom. Drag to move. Tap a picture to explore its identity and sources.';}
   function startWallDrawing(){if(wallDrawing){cancelDrawing();return;}cancelDrawing();window.LFW.showView('wall');wallDrawing=true;canvas.classList.add('is-drawing');$('#addWallPhoto').textContent='Cancel marking';$('#wallHint').textContent='Tap two opposite corners of the picture. Press Escape to cancel. You can fine-tune the boundary afterward.';canvas.scrollIntoView({block:'center'});}
@@ -189,8 +193,9 @@
     $('#saveSourceConnection').disabled=saving||blocked;
     $('#sourceConnectionNote').disabled=saving;
   }
-  function beginSourceConnection(id){
+  function beginSourceConnection(id,browse=false){
     if(saving)return;
+    if(window.WallIdentification&&!browse){selectPhoto(id);window.WallIdentification.focus();return;}
     selectPhoto(id,false);if(selected!==id||!current())return;
     if(restricted(current())){message('Turn on living-person details to connect this photograph.',true);return;}
     connectionPhoto=id;clearSourceChoice();peopleLimit=30;$('#sourcePeopleSearch').value='';$('#sourcePeopleScope').value='page';
@@ -219,7 +224,7 @@
     if(sourcePerson===pending&&connectionPhoto===photoId){connectionSaved=saved;$('#sourceConnectionStatus').textContent=saved?'Connection saved. The person and source page are linked to your photo. Review the evidence before confirming the identity.':$('#photoSaveStatus').textContent;renderSourceReview();renderSourceContext();}
   }
   function sourceChanged(doc){cancelDrawing();sourceDoc=doc;clearSourceChoice();peopleLimit=30;$('#citeSourcePhoto').hidden=!selected;$('#sourcePersonHotspots').innerHTML='';if(doc){renderSourcePeople();loadSourceMap();}}
-  $('#connectPhotoSource').addEventListener('click',()=>beginSourceConnection(selected));
+  $('#connectPhotoSource').addEventListener('click',()=>beginSourceConnection(selected,true));
   $('#sourcePeopleReport').addEventListener('change',()=>app()?.openSource($('#sourcePeopleReport').value,1));
   for(const [id,event] of [['sourcePeopleSearch','input'],['sourcePeopleScope','change']])$('#'+id).addEventListener(event,()=>{clearSourceChoice();peopleLimit=30;renderSourcePeople();});
   $('#sourcePeopleMore').addEventListener('click',()=>{peopleLimit+=30;renderSourcePeople();});
@@ -250,7 +255,7 @@
     const action=e.target.closest('[data-claim-action]');if(action){const p=current(),c=p?.claims.find(c=>c.id===action.dataset.claimId);if(!c)return;const prior=c.status;c.status=action.dataset.claimAction;try{rules.validate(p,catalog());markDirty();renderClaims();await save();}catch(error){c.status=prior;message(error.message,true);}return;}
     const remove=e.target.closest('[data-remove-evidence]');if(remove){const p=current();p.evidence=p.evidence.filter(x=>x.id!==remove.dataset.removeEvidence);for(const c of p.claims){if(c.evidenceIds.includes(remove.dataset.removeEvidence)){c.evidenceIds=c.evidenceIds.filter(id=>id!==remove.dataset.removeEvidence);if(c.status==='confirmed')c.status='proposed';}}markDirty();renderClaims();}
   });
-  $('#closePhotoNotebook').addEventListener('click',()=>{if(saving)return;allowLeave();selected=null;connectionPhoto=null;clearSourceChoice();dirty=false;$('#photoResearchEditor').hidden=true;$('#photoResearchEmpty').hidden=false;$('#closePhotoNotebook').hidden=true;$('#linkTreePerson').hidden=true;$('#citeSourcePhoto').hidden=true;history.pushState(null,'','#wall');renderRegions();});
+  $('#closePhotoNotebook').addEventListener('click',()=>{if(saving||window.WallIdentification&&!window.WallIdentification.allowLeave())return;window.WallIdentification?.close();allowLeave();selected=null;connectionPhoto=null;clearSourceChoice();dirty=false;$('#photoResearchEditor').hidden=true;$('#photoResearchEmpty').hidden=false;$('#closePhotoNotebook').hidden=true;$('#linkTreePerson').hidden=true;$('#citeSourcePhoto').hidden=true;history.pushState(null,'','#wall');renderRegions();});
   $('#unknownPortraitSource').addEventListener('change',()=>{unknownLimit=16;renderUnknown();});$('#moreUnknownPortraits').addEventListener('click',()=>{unknownLimit+=24;renderUnknown();});
   function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function exportNotebook(){pullFields();const merged=new Map(records);for(const [id,p] of drafts)merged.set(id,p);download({app:'The Living Family Wall',schemaVersion:1,exportedAt:new Date().toISOString(),photographs:[...merged.values()]},'family-photo-research.json');}
@@ -266,7 +271,14 @@
   function restore(){if(!location.hash.startsWith('#wall'))return;const params=new URLSearchParams(location.hash.split('?')[1]||'');if(params.get('photo'))selectPhoto(params.get('photo'),false);if(params.has('unidentified'))$('#unknownPortraitTitle').scrollIntoView({block:'start'});}
   window.addEventListener('hashchange',restore);window.addEventListener('popstate',restore);
   window.addEventListener('beforeunload',event=>{if(dirty||[...drafts].some(([id,p])=>JSON.stringify(p)!==JSON.stringify(records.get(id)))){event.preventDefault();event.returnValue='';}});
-  window.PhotoWorkspace={startWallDrawing,exportNotebook,importNotebook,archiveChanged,profileChanged,sourceChanged};
+  async function connectInline(personId,reportId,page,note,confirmed=false){
+    if(saving||!current()||restricted(current()))return false;
+    const person=profile(personId),doc=window.SourceDocuments.source(app()?.documents||[],reportId,Number(page));
+    if(!person||person.restricted&&!app()?.showLiving)return false;
+    pullFields();const photoId=selected,prior=structuredClone(current());
+    try{const value=rules.connectSourcePerson(current(),person,doc,note,{claimId:uid('claim'),evidenceId:uid('evidence')},catalog());if(confirmed)value.claims.find(c=>c.profileId===personId&&c.status!=='rejected').status='confirmed';drafts.set(photoId,value);dirty=true;renderEditor();const ok=await save();if(!ok){drafts.set(photoId,prior);dirty=JSON.stringify(prior)!==JSON.stringify(records.get(photoId));}if(selected===photoId)renderEditor();return ok;}catch(e){message(e.message,true);return false;}
+  }
+  window.PhotoWorkspace={get selected(){return current();},get photos(){return [...records.values()];},get busy(){return saving;},ensureSaved:save,connectInline,selectPhoto,startWallDrawing,exportNotebook,importNotebook,archiveChanged,profileChanged,sourceChanged};
   async function load(){
     const results=await Promise.allSettled([fetch('wall-catalog.json',{cache:'no-store'}).then(async r=>r.ok?(await r.json()).regions:[]),fetch('/api/photo-research',{cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Saved research is unavailable. Try reloading; unsaved drafts can be exported.');return (await r.json()).records;})]);
     if(results[0].status==='fulfilled')for(const p of results[0].value||[])records.set(p.id,p);

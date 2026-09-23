@@ -1,5 +1,6 @@
 // Bundled with PhotoResearch and a private reference catalog by build-site.mjs.
 import '../photo-research.js';
+import {handlePhotoAugments} from './photo-augments.mjs';
 import {handleArchiveItems} from './archive-items.mjs';
 import {handleArchiveImports,archivePart,archiveCatalog} from './archive-imports.mjs';
 const json=(body,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
@@ -34,6 +35,7 @@ export async function handleResearch(request,env,catalog){
 export default {async fetch(request,env){
   const path=new URL(request.url).pathname,owner=request.headers.get('oai-authenticated-user-id');
   try{
+    if(path==='/api/photo-augments'||path.startsWith('/api/photo-augments/'))return handlePhotoAugments(request,env);
     if(path.startsWith('/api/archive-imports'))return handleArchiveImports(request,env,REFERENCE_CATALOG);
     if(path==='/api/photo-research'||path.startsWith('/api/photo-research/'))return handleResearch(request,env,await archiveCatalog(env,owner,REFERENCE_CATALOG));
     if(path==='/api/archive-items'||path.startsWith('/api/archive-items/'))return handleArchiveItems(request,env,await archiveCatalog(env,owner,REFERENCE_CATALOG));
