@@ -32,6 +32,62 @@ def build(text=REPORT_TEXT, previous=None):
 
 
 class ExtractionTests(unittest.TestCase):
+    def test_page_is_a_name_and_page_footers_are_not_people(self):
+        archive, tree, audit = build('''First Generation
+1. Page Example was born in 1800.
+Page Example and Morgan Page were married in 1820.
+Morgan Page was born in 1801.
+Page Example and Morgan Page had the following children:
+i. Casey Page Example was born in 1825.
+ii. Robin Page (Ray) Example was born in 1827.
+Page 1 of 2
+Page 2
+''')
+        self.assertFalse(audit['issues'])
+        self.assertEqual({p['name'] for p in archive['profiles']},
+                         {'Page Example', 'Morgan Page', 'Casey Page Example', 'Robin Page (Ray) Example'})
+        self.assertEqual(len(tree['edges']), 4)
+        self.assertEqual(audit['reports'][0]['childEntries'], 2)
+
+    def test_names_only_child_does_not_absorb_next_paragraph(self):
+        archive, tree, audit = build('''First Generation
+1. Alex Example was born in 1800.
+Alex Example and Morgan Sample had the following children:
+
+2 i. Casey Taylor
+Example.
+
+Unrelated Name
+
+Second Generation
+2. Casey Taylor Example (son of Alex Example and Morgan Sample).
+''')
+        self.assertFalse(audit['issues'])
+        casey = [p for p in archive['profiles'] if p['name'] == 'Casey Taylor Example']
+        self.assertEqual(len(casey), 1)
+        self.assertEqual(len(casey[0]['sources']), 2)
+        self.assertEqual(len(tree['edges']), 2)
+        self.assertFalse(any('Unrelated' in p['name'] for p in archive['profiles']))
+
+    def test_divorced_partner_and_later_union_keep_separate_child_groups(self):
+        archive, tree, audit = build('''First Generation
+1. Alex Example was born in 1800.
+Alex Example and Morgan Sample were divorced in ???.
+Morgan Sample Alex Example and Morgan Sample had the following children:
+i. Casey Example was born in 1825.
+
+Alex Example and Taylor Test were divorced in ???.
+Taylor Test Alex Example and Taylor Test had the following children:
+i. Robin Example was born in 1830.
+''')
+        self.assertFalse(audit['issues'])
+        people = {p['id']: p['name'] for p in archive['profiles']}
+        for child, parents in [('Casey Example', {'Alex Example', 'Morgan Sample'}),
+                               ('Robin Example', {'Alex Example', 'Taylor Test'})]:
+            self.assertEqual({people[e['parentId']] for e in tree['edges']
+                              if people[e['childId']] == child}, parents)
+        self.assertTrue(validate(archive, tree)['passed'])
+
     def test_wrapped_headings_numbered_references_and_page_citations(self):
         archive, tree, audit = build()
         self.assertFalse(audit['issues'])

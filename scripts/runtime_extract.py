@@ -30,10 +30,30 @@ def _rebuild(payload):
     result = reports.validate(archive, tree, payload.get('checks'))
     for report in audit['reports']:
         if report['numberedCandidates'] != report['numberedEntries'] or report['childCandidates'] != report['childEntries']:
-            result['errors'].append('Incomplete entry coverage: '+report['reportId'])
+            result['errors'].append(
+                f'Incomplete entry coverage in "{report["title"]}": '
+                f'{report["numberedEntries"]} of {report["numberedCandidates"]} numbered entries and '
+                f'{report["childEntries"]} of {report["childCandidates"]} child entries read.')
     fatal = [i for i in ex.issues if i['type'].startswith(('unparsed', 'unresolved-family', 'child-without', 'reference-name', 'self-link'))]
     if fatal:
-        result['errors'].append('Some report entries or family headings need review before import.')
+        labels = {'unparsed-name': 'person name could not be read',
+                  'unparsed-child': 'child name could not be read',
+                  'unresolved-family-heading': 'family heading could not be linked',
+                  'child-without-family-heading': 'child has no recognized family heading',
+                  'reference-name-mismatch': 'numbered reference has a different name',
+                  'self-link': 'relationship points to the same person'}
+        details = []
+        for issue in fatal:
+            source = issue.get('source', {})
+            location = source.get('title', added['title'])
+            if source.get('page'):
+                location += f', page {source["page"]}'
+            detail = location+': '+labels.get(issue['type'], 'relationship needs review')
+            if detail not in details:
+                details.append(detail)
+        result['errors'].append('Review required — '+'; '.join(details[:5])+
+                                (f'; {len(details)-5} more locations' if len(details)>5 else '')+
+                                '. Your original PDF remains saved.')
     new_profiles = [p for p in archive['profiles'] if any(s['reportId'] == added['id'] for s in p['sources'])]
     if not new_profiles:
         result['errors'].append('No supported descendant-report entries were found. The original is saved; this report needs transcription or a supported report layout.')

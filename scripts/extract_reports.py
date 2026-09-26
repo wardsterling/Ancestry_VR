@@ -86,7 +86,7 @@ def child_starts(text):
 def valid_name(s):
     words = s.split()
     return (1 <= len(words) <= 9 and 2 <= len(s) <= 100
-            and not re.search(r'\b(?:was|born|died|married|had|following|children|notes|about|generation|page|residence|occupation|preparer|email)\b|https?://|@', s, re.I)
+            and not re.search(r'\b(?:was|born|died|married|had|following|children|notes|about|generation|residence|occupation|preparer|email)\b|https?://|@', s, re.I)
             and name_key(s) not in {'he', 'she', 'they', 'unknown', 'none'})
 
 
@@ -272,7 +272,7 @@ class Extractor:
                     break
                 if re.match(r'^Email:|^Address:', line):
                     continue
-                if re.match(r'^Descendants of |^Page \d+ of |^\d+$', line):
+                if re.match(r'^Descendants of |^Page \d+(?: of \d+)?$|^\d+$', line):
                     continue
                 g = re.match(r'^(?:Generation (\d+)|('+'|'.join(ORDINALS)+r') Generation)', line)
                 if g:
@@ -289,7 +289,7 @@ class Extractor:
             m = re.match(r'^[ \t]*(\d{1,3})\.[ \t]+(.*)', line['text'])
             if m and not re.match(r'[ivxlcdm]+\.\s+', m[2], re.I):
                 candidate=head_name(' '.join([m[2]]+[x['text'] for x in lines[i+1:i+4]])) or head_name(re.sub(r'\bwas\s*$','',m[2]))
-                if candidate and not re.match(r'^(?:Was|He|She|They|Notes|More|Page|In|The)\b',m[2],re.I):
+                if candidate and not re.match(r'^(?:Was|He|She|They|Notes|More|In|The)\b',m[2],re.I):
                     starts.append((i, int(m[1]), m[2]))
         mains, blocks = {}, []
         for j, (start, number, head) in enumerate(starts):
@@ -309,9 +309,11 @@ class Extractor:
         # Each block is handled after all numbered identities have been registered.
         for root, block, joined in blocks:
             root_record = self.records[root]
-            offsets, pos = [], 0
+            offsets, paragraph_offsets, pos = [], [], 0
             for line in block:
                 offsets.append((pos, line['page']))
+                if line.get('paragraphStart'):
+                    paragraph_offsets.append(pos)
                 pos += len(line['text'])+1
             page_at = lambda offset: next((p for o,p in reversed(offsets) if o<=offset), block[0]['page'])
             flat = compact(joined)
@@ -329,7 +331,7 @@ class Extractor:
                 add_spouse(name,raw,page_at(offset))
             # Family headers and named marriage statements identify additional partners.
             root_pattern = name_pattern(root_record['name'])
-            for m in re.finditer(root_pattern+r'\s+and\s+(.{2,140}?)\s+(?:were married|had the following child)', flat, re.I):
+            for m in re.finditer(root_pattern+r'\s+and\s+(.{2,140}?)\s+(?:were married|were divorced|had the following child)', flat, re.I):
                 partner = clean_name(m[1])
                 add_spouse(partner, partner, block[0]['page'])
             # Partner biographies in the older report format: "Maria ... was born".
@@ -362,13 +364,15 @@ class Extractor:
             for j,m in enumerate(children):
                 end = children[j+1].start() if j+1<len(children) else len(joined)
                 next_header = next((h[0] for h in headers if h[0]>m.start()),end)
-                raw = joined[m.start():min(end,next_header)]
-                raw = raw[raw.find(m[3]):]
+                raw = joined[m.start(3):min(end,next_header)]
                 # A later union belongs to the numbered person, not their last child.
-                union=re.search(root_pattern+r'\s+and\s+.{2,140}?\s+(?:were married|had\s+the\s+following)',raw,re.I|re.S)
+                union=re.search(root_pattern+r'\s+and\s+.{2,140}?\s+(?:were married|were divorced|had\s+the\s+following)',raw,re.I|re.S)
                 if union:
                     raw=raw[:union.start()]
-                name = head_name(raw[:900])
+                # A names-only child must not absorb the next paragraph's name.
+                # Keep wrapped lines of the child's own paragraph together.
+                name_end = next((o for o in paragraph_offsets if o > m.start(3)), end)-m.start(3)
+                name = head_name(raw[:min(900, name_end)])
                 if not name:
                     self.issues.append(dict(type='unparsed-child',source=citation(report,page_at(m.start()),raw)))
                     continue

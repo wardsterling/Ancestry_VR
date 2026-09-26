@@ -26,3 +26,17 @@ class RuntimeExtractTests(unittest.TestCase):
     def test_same_original_is_not_reimported(self):
         payload=self.payload();payload['archive']['documents']=[payload['added']]
         with self.assertRaisesRegex(ValueError,'already incorporated'):rebuild(payload)
+    def test_incomplete_entry_identifies_report_page_and_coverage(self):
+        payload=self.payload(TEXT.replace('2 i. Casey Example was born in 1830.',
+                                         '\fii. Unknown was born in 1830.'))
+        result=rebuild(payload)
+        self.assertIn('"Synthetic family report"',result['error'])
+        self.assertIn('0 of 1 child entries read',result['error'])
+        self.assertIn('page 2: child name could not be read',result['error'])
+        self.assertIn('original PDF remains saved',result['error'])
+        self.assertEqual(payload['archive']['profiles'],[])
+        self.assertNotIn('archive',result)
+    def test_true_reference_mismatch_still_blocks_import(self):
+        result=rebuild(self.payload(TEXT.replace('2 i. Casey Example', '2 i. Robin Example')))
+        self.assertIn('page 1: numbered reference has a different name',result['error'])
+        self.assertNotIn('archive',result)
