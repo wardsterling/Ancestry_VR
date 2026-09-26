@@ -1,0 +1,94 @@
+/* Private reference manager. Working images appear only inside this editor. */
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id),rules=window.WallReferenceRules,dialog=$('wallReferenceDialog');
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let references=[],draft=null,editorImage=null,regionId=null,crop=null,dirty=false,cropDirty=false,busy=false,token=0,queue=[],point=null;
+  const photos=()=>window.PhotoWorkspace?.photos.filter(p=>p.kind==='wall')||[];
+  const visible=p=>window.ArchiveApp?.showLiving||!p.claims?.some(c=>c.status!=='rejected'&&window.ArchiveApp?.profiles.find(person=>person.id===c.profileId)?.restricted);
+  const status=text=>$('wallReferenceStatus').textContent=text;
+  const pending=()=>dirty||cropDirty;
+  async function json(url,options={}){const response=await fetch(url,{cache:'no-store',...options});let value;try{value=await response.json();}catch{throw Error('Open the private Site to manage wall references.');}if(!response.ok)throw Error(value.error||'Try again.');return value;}
+  function lock(value){busy=value;dialog.querySelectorAll('button,input,select').forEach(node=>node.disabled=value);dialog.setAttribute('aria-busy',String(value));}
+  function canLeave(){return !busy&&(!pending()||window.confirm('Discard unsaved reference edits?'));}
+  function clearQuality(){$('referenceQuality').hidden=true;$('referenceQualityImage').removeAttribute('src');$('referenceFaceBoxes').innerHTML='';}
+  function clearEditor(){token++;draft=null;editorImage=null;regionId=null;crop=null;dirty=false;cropDirty=false;$('referenceEditor').hidden=true;$('referenceImage').removeAttribute('src');clearQuality();}
+  function close(){if(!canLeave())return;clearEditor();dialog.close();}
+  function image(src){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('This image could not open. Choose JPEG or PNG, or retake the photograph.'));img.src=src;});}
+  function renderList(){
+    $('referenceList').innerHTML=references.map(r=>`<article class="reference-row"><div><strong>${esc(r.label)}</strong><small>${r.width} × ${r.height} pixels · ${r.regions.length} linked crops · ${r.enabled?'Included':'Paused'}</small></div><button class="secondary" data-reference-edit="${esc(r.id)}">Edit &amp; link pictures</button><button class="text-button" data-reference-remove="${esc(r.id)}">Remove</button></article>`).join('')||'<p>No background photos yet. Upload a whole-wall photo, a wall section, or individual close-ups.</p>';
+  }
+  function renderQueue(){
+    $('referenceUploadQueue').innerHTML=queue.map(item=>`<li><span>${esc(item.name)}</span><span>${esc(item.error||({waiting:'Waiting',uploading:'Preparing and saving…',saved:'Saved',error:'Could not save'})[item.state])}</span>${item.state==='error'?`<button class="secondary" data-reference-retry="${esc(item.id)}">Retry</button><button class="text-button" data-reference-dismiss="${esc(item.id)}">Dismiss</button>`:''}</li>`).join('');
+  }
+  async function load(){lock(true);status('Loading background photos…');try{const data=await json('/api/wall-references');references=data.references;renderList();status('Reference images are shown only while managing them here.');}catch(error){status(error.message);}finally{lock(false);}}
+  async function open(){if(dialog.open)return;dialog.showModal();await load();}
+  async function prepare(item){
+    if(item.blob)return;if(item.file.size>35*1024*1024)throw Error('Choose an image up to 35 MB.');
+    let url=URL.createObjectURL(item.file);try{const source=await image(url),scale=Math.min(1,rules.MAX_SIDE/Math.max(source.width,source.height),Math.sqrt(rules.MAX_PIXELS/(source.width*source.height))),canvas=document.createElement('canvas');canvas.width=Math.floor(source.width*scale);canvas.height=Math.floor(source.height*scale);const ctx=canvas.getContext('2d');if(!ctx)throw Error('This device could not prepare the image. Try a smaller photo.');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(source,0,0,canvas.width,canvas.height);
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.95));if(!blob||blob.size>rules.MAX_BYTES)throw Error('The working image is too large. Choose a smaller photo.');
+      item.record={id:item.id,label:item.name.replace(/\.[^.]+$/,''),width:canvas.width,height:canvas.height,rotation:0,enabled:true,regions:[],revision:0};rules.validate(item.record);item.blob=blob;canvas.width=1;canvas.height=1;
+    }finally{URL.revokeObjectURL(url);}
+  }
+  async function upload(){
+    if(busy)return;lock(true);let first=null;
+    for(const item of queue.filter(v=>v.state==='waiting')){item.state='uploading';renderQueue();try{await prepare(item);const form=new FormData();form.append('metadata',JSON.stringify(item.record));form.append('image',item.blob,'wall-reference.jpg');const result=await json('/api/wall-references/'+item.id,{method:'PUT',body:form});references=references.filter(r=>r.id!==item.id).concat(result.reference);item.state='saved';item.file=null;item.blob=null;first=first||item.id;renderList();}catch(error){item.state='error';item.error=error.message;}renderQueue();}
+    lock(false);const failed=queue.filter(item=>item.state==='error').length;status(failed?`${failed} photo${failed===1?'':'s'} could not upload. Use Retry beside each failed photo.`:'Saved photos are ready to link. Choose a wall picture and outline it in the clearer image.');if(first&&!draft){await edit(first);if(failed)status(`${failed} photo${failed===1?'':'s'} could not upload. Saved photos are ready to link; use Retry for the others.`);}
+  }
+  async function addFiles(files){if(!files?.length||!canLeave())return;if(files.length>20){status('Choose up to 20 images at a time.');return;}clearEditor();queue=queue.filter(item=>item.state!=='saved');queue.push(...Array.from(files,file=>({id:'wallref-'+crypto.randomUUID(),name:file.name,file,state:'waiting'})));renderQueue();await upload();}
+  function renderTargets(){
+    const before=$('referenceTarget').value||window.PhotoWorkspace?.selected?.id||'',wall=photos().filter(visible);
+    $('referenceTarget').innerHTML='<option value="">Choose a picture on the original wall</option>'+wall.map((p,i)=>`<option value="${esc(p.id)}">${i+1}. ${esc(p.title)}</option>`).join('');$('referenceTarget').value=wall.some(p=>p.id===before)?before:'';
+    $('referenceOriginalRegions').innerHTML=wall.map(p=>`<button type="button" data-reference-target="${esc(p.id)}" aria-label="Choose ${esc(p.title)}" style="left:${p.rect[0]}%;top:${p.rect[1]}%;width:${p.rect[2]}%;height:${p.rect[3]}%"></button>`).join('');targetPreview();
+  }
+  function targetPreview(){const p=photos().find(p=>p.id===$('referenceTarget').value);if(!p||!visible(p)){$('referenceTargetPreview').innerHTML='';return;}const ratio=1536/387,[x,y,w,h]=p.rect;$('referenceTargetPreview').innerHTML=`<svg viewBox="${x*ratio} ${y} ${w*ratio} ${h}" role="img" aria-label="Original wall picture selected"><image href="assets/family-wall.jpg" width="${100*ratio}" height="100" preserveAspectRatio="none"/></svg><strong>${esc(p.title)}</strong>`;}
+  function renderRegions(){if(!draft)return;$('referenceLinkedCrops').innerHTML=draft.regions.map(r=>{const p=photos().find(p=>p.id===r.photoId);return `<article class="reference-row"><div><strong>${esc(p&&visible(p)?p.title:'Wall picture · details hidden')}</strong><small>${r.enabled?'Used for matching':'Excluded from matching'}</small></div><button class="secondary" data-reference-region="${esc(r.id)}">Edit crop</button><button class="text-button" data-reference-toggle="${esc(r.id)}">${r.enabled?'Exclude':'Include'}</button><button class="text-button" data-reference-unlink="${esc(r.id)}">Remove link</button></article>`;}).join('')||'<p>No linked pictures yet.</p>';}
+  function renderImage(){if(!draft||!editorImage)return;const swap=draft.rotation%180!==0,scale=Math.min(1,2200/Math.max(editorImage.width,editorImage.height)),canvas=document.createElement('canvas');canvas.width=Math.round((swap?editorImage.height:editorImage.width)*scale);canvas.height=Math.round((swap?editorImage.width:editorImage.height)*scale);const ctx=canvas.getContext('2d');ctx.translate(canvas.width/2,canvas.height/2);ctx.rotate(draft.rotation*Math.PI/180);ctx.drawImage(editorImage,-editorImage.width*scale/2,-editorImage.height*scale/2,editorImage.width*scale,editorImage.height*scale);$('referenceImage').src=canvas.toDataURL('image/jpeg',.9);canvas.width=1;canvas.height=1;renderCrop();}
+  function renderCrop(){
+    $('referenceCropMode').textContent=regionId?'Editing an existing picture link':'New picture link';
+    $('referenceCropBox').hidden=!crop;if(!crop)return;const [x,y,w,h]=crop;Object.assign($('referenceCropBox').style,{left:x+'%',top:y+'%',width:w+'%',height:h+'%'});['referenceX','referenceY','referenceW','referenceH'].forEach((id,i)=>$(id).value=crop[i]);
+    const size=rules.cropGeometry(draft.width,draft.height,draft.rotation,crop);$('referenceCropSize').textContent=`Selected picture: ${size.originalWidth} × ${size.originalHeight} source pixels. A close-up of one frame usually gives more face detail than a whole-wall photo.`;
+  }
+  async function edit(id){if(!canLeave())return;const record=references.find(r=>r.id===id);if(!record)return;clearEditor();const current=++token;lock(true);try{const loaded=await image(record.url);if(current!==token)return;editorImage=loaded;draft=structuredClone(record);$('referenceEditor').hidden=false;$('referenceLabel').value=draft.label;$('referenceEnabled').checked=draft.enabled;$('referenceZoom').value='100';$('referenceImageStage').style.width='100%';renderTargets();renderImage();renderRegions();status('Choose a picture on the original wall, then draw around the same picture in this reference.');$('referenceEditor').scrollIntoView?.({block:'start',behavior:'smooth'});}catch(error){status(error.message);}finally{lock(false);}}
+  function newCrop(){if(busy||cropDirty&&!window.confirm('Discard the unsaved crop?'))return;regionId=null;crop=null;cropDirty=false;renderCrop();$('referenceCropSize').textContent='Draw around one picture in this reference image.';clearQuality();}
+  function selectRegion(id){if(busy||cropDirty&&!window.confirm('Discard the unsaved crop?'))return;const r=draft?.regions.find(r=>r.id===id);if(!r)return;regionId=id;crop=[...r.crop];cropDirty=false;$('referenceTarget').value=r.photoId;targetPreview();renderCrop();clearQuality();}
+  function markCrop(value){crop=rules.rectangle(value);cropDirty=true;clearQuality();renderCrop();}
+  async function save(){
+    if(!draft||busy)return;
+    try{
+      if(cropDirty){const photoId=$('referenceTarget').value;if(!photoId)throw Error('Choose the corresponding picture on the original wall first.');const next={id:regionId||'region-'+crypto.randomUUID(),photoId,crop:rules.rectangle(crop),enabled:draft.regions.find(r=>r.id===regionId)?.enabled!==false};draft.regions=draft.regions.filter(r=>r.id!==next.id).concat(next);regionId=next.id;cropDirty=false;dirty=true;}
+      draft.label=$('referenceLabel').value;draft.enabled=$('referenceEnabled').checked;const value={...rules.validate(draft,photos().map(p=>p.id)),revision:draft.revision};lock(true);status('Saving reference and picture links…');const form=new FormData();form.append('metadata',JSON.stringify(value));const result=await json('/api/wall-references/'+draft.id,{method:'PUT',body:form});draft=structuredClone(result.reference);references=references.filter(r=>r.id!==draft.id).concat(result.reference);dirty=false;renderList();renderRegions();status(draft.regions.length?'Saved. Enabled crops will be used automatically to compare these wall pictures with source portraits.':'Saved. Add picture crops when ready.');window.WallMatches?.changed();
+    }catch(error){status(error.message+' Your edits are still here.');}finally{lock(false);}
+  }
+  async function remove(id){if(!canLeave()||!window.confirm('Remove this background photo and its matching crops?'))return;const reference=references.find(r=>r.id===id);if(!reference)return;lock(true);try{await json('/api/wall-references/'+id,{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({revision:reference.revision})});references=references.filter(r=>r.id!==id);if(draft?.id===id)clearEditor();renderList();window.WallMatches?.changed();status('Background photo removed.');}catch(error){status(error.message);}finally{lock(false);}}
+  async function inspect(){if(!draft||!crop||busy){status('Draw around a picture before checking it.');return;}lock(true);clearQuality();status('Checking this crop for detectable faces…');try{const record={url:draft.url,rotation:draft.rotation,crop,revision:draft.revision},features=await window.PhotoMatcher.analyze(record,true),preview=await window.PhotoMatcher.preview(record);$('referenceQualityImage').src=preview;$('referenceFaceBoxes').innerHTML=(features.faceBoxes||[]).map(box=>`<span style="left:${box[0]}%;top:${box[1]}%;width:${box[2]}%;height:${box[3]}%"></span>`).join('');$('referenceQuality').hidden=false;const message=!features.faceAvailable?'Face detection could not run. Try again after reconnecting.':features.faces.length?`${features.faces.length} usable face${features.faces.length===1?'':'s'} detected. Outlines show the faces available for comparison; a source match is not guaranteed.`:'No usable face detected. Try a sharper, straight-on photo of this individual frame, with less glare.';$('referenceQualityStatus').textContent=message;status(message);}catch(error){status(error.message);}finally{lock(false);}}
+  $('referenceUpload').addEventListener('click',()=>{if(!busy)$('referenceFiles').click();});$('referenceCapture').addEventListener('click',()=>{if(!busy)$('referenceCamera').click();});
+  for(const id of ['referenceFiles','referenceCamera'])$(id).addEventListener('change',e=>{const pendingUpload=addFiles(e.target.files);e.target.value='';return pendingUpload;});
+  $('referenceSave').addEventListener('click',save);$('referenceCheck').addEventListener('click',inspect);$('referenceNewCrop').addEventListener('click',newCrop);$('referenceClose').addEventListener('click',close);
+  $('referenceLabel').addEventListener('input',()=>dirty=true);$('referenceEnabled').addEventListener('change',()=>dirty=true);
+  $('referenceTarget').addEventListener('change',()=>{if(crop)cropDirty=true;targetPreview();});
+  $('referenceRotate').addEventListener('click',()=>{if(!draft||busy)return;draft.rotation=(draft.rotation+90)%360;draft.regions=draft.regions.map(r=>({...r,crop:rules.rotateCrop(r.crop)}));if(crop)crop=rules.rotateCrop(crop);dirty=true;clearQuality();renderImage();});
+  $('referenceZoom').addEventListener('input',()=>{$('referenceImageStage').style.width=$('referenceZoom').value+'%';});$('referenceOriginalZoom').addEventListener('input',()=>{$('referenceOriginalStage').style.width=$('referenceOriginalZoom').value+'%';});
+  for(const id of ['referenceX','referenceY','referenceW','referenceH'])$(id).addEventListener('change',()=>{if(!draft||busy)return;try{markCrop(['referenceX','referenceY','referenceW','referenceH'].map(id=>Number($(id).value)));}catch(error){status(error.message);renderCrop();}});
+  const stage=$('referenceImageStage'),local=e=>{const b=stage.getBoundingClientRect();return {x:Math.max(0,Math.min(100,(e.clientX-b.left)/b.width*100)),y:Math.max(0,Math.min(100,(e.clientY-b.top)/b.height*100))};};
+  stage.addEventListener('pointerdown',e=>{if(!draft||busy)return;if(!$('referenceDrawMode').checked)return;point=local(e);stage.setPointerCapture(e.pointerId);e.preventDefault();});
+  stage.addEventListener('pointermove',e=>{if(!point)return;const end=local(e);$('referenceCropBox').hidden=false;Object.assign($('referenceCropBox').style,{left:Math.min(point.x,end.x)+'%',top:Math.min(point.y,end.y)+'%',width:Math.abs(end.x-point.x)+'%',height:Math.abs(end.y-point.y)+'%'});});
+  stage.addEventListener('pointerup',e=>{if(!point)return;const end=local(e);try{markCrop([Math.min(point.x,end.x),Math.min(point.y,end.y),Math.abs(end.x-point.x),Math.abs(end.y-point.y)]);}catch(error){status(error.message);renderCrop();}point=null;});stage.addEventListener('pointercancel',()=>{point=null;renderCrop();});
+  $('referenceDrawMode').addEventListener('change',()=>stage.classList.toggle('drawing',$('referenceDrawMode').checked));
+  document.addEventListener('click',e=>{
+    if(e.target.closest('[data-open-wall-references]'))return open();
+    const editButton=e.target.closest('[data-reference-edit]');if(editButton)return edit(editButton.dataset.referenceEdit);
+    const removeButton=e.target.closest('[data-reference-remove]');if(removeButton)return remove(removeButton.dataset.referenceRemove);
+    const region=e.target.closest('[data-reference-region]');if(region){selectRegion(region.dataset.referenceRegion);return;}
+    const target=e.target.closest('[data-reference-target]');if(target){$('referenceTarget').value=target.dataset.referenceTarget;if(crop)cropDirty=true;targetPreview();return;}
+    const toggle=e.target.closest('[data-reference-toggle]');if(toggle&&!busy){const r=draft?.regions.find(r=>r.id===toggle.dataset.referenceToggle);if(r){r.enabled=!r.enabled;dirty=true;renderRegions();status('Inclusion changed. Save changes to apply it.');}return;}
+    const unlink=e.target.closest('[data-reference-unlink]');if(unlink&&!busy){draft.regions=draft.regions.filter(r=>r.id!==unlink.dataset.referenceUnlink);if(regionId===unlink.dataset.referenceUnlink){regionId=null;crop=null;cropDirty=false;renderCrop();}dirty=true;renderRegions();status('Link removed from your draft. Save changes to apply it.');return;}
+    const retry=e.target.closest('[data-reference-retry]');if(retry&&!busy){const item=queue.find(i=>i.id===retry.dataset.referenceRetry);if(item){item.error='';item.state='waiting';return upload();}return;}
+    const dismiss=e.target.closest('[data-reference-dismiss]');if(dismiss&&!busy){queue=queue.filter(i=>i.id!==dismiss.dataset.referenceDismiss);renderQueue();}
+  });
+  // The app also has generic dialog handlers; capture outside clicks so edits stay safe.
+  dialog.addEventListener('click',e=>{if(e.target===dialog){e.stopImmediatePropagation();close();}},true);
+  dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
+  window.addEventListener('beforeunload',e=>{if(busy||pending()||queue.some(q=>q.state==='error')){e.preventDefault();e.returnValue='';}});
+  window.WallReferences={open,get busy(){return busy;}};
+})();

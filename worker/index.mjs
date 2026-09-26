@@ -2,6 +2,7 @@
 import '../photo-research.js';
 import {handlePhotoAugments} from './photo-augments.mjs';
 import {handlePhotoMatches} from './photo-matches.mjs';
+import {handleWallReferences} from './wall-references.mjs';
 import {handleArchiveItems} from './archive-items.mjs';
 import {handleArchiveImports,archivePart,archiveCatalog} from './archive-imports.mjs';
 const json=(body,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff'}});
@@ -36,6 +37,7 @@ export async function handleResearch(request,env,catalog){
 export default {async fetch(request,env){
   const path=new URL(request.url).pathname,owner=request.headers.get('oai-authenticated-user-id');
   try{
+    if(path==='/api/wall-references'||path.startsWith('/api/wall-references/'))return handleWallReferences(request,env,REFERENCE_CATALOG);
     if(path==='/api/session')return request.method==='GET'?json(owner?{authenticated:true}:{error:'Sign in to load your private archive.'},owner?200:401):json({error:'Method not allowed.'},405);
     if(path==='/api/photo-matches'){
       if(!owner)return json({error:'Sign in to load saved wall matches.'},401);

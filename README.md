@@ -458,3 +458,34 @@ Mid-session expiration preserves unsaved drafts and asks the user to reconnect.
 Close-up images, archive data and saved suggestions stay in the private Site. GitHub
 contains code, schemas, model dependency declarations and tests only. Existing notebook
 exports contain photo research; close-ups and machine suggestions remain in storage.
+
+
+## Background wall reference images
+
+Explore Wall → **Improve photo matching** opens a private reference manager. Upload
+up to 20 photographs per batch, or take a photo. Whole-wall images, wall sections and
+individual close-ups can be mixed. The upload queue retains failed files for retry;
+successful files are already saved. These working images are only visible in this
+manager and never replace the displayed wall or enter archive galleries/collections.
+
+Choose a picture from the original wall, draw around the same frame in the reference,
+and save. **Link another picture** adds another mapping from the same uploaded image;
+several references can improve the same wall picture. Mappings are explicit: the app
+does not assume two differently framed wall photographs share pixel coordinates.
+The editor provides zoom, rotation, numeric crop adjustments, labels, inclusion
+switches, removal and a local **Check crop for faces** preview. Detection is not an
+identity decision. All inferred source connections still require curator review.
+
+Working JPEGs retain up to 8192 pixels per side and 16 megapixels (16 MB maximum).
+The browser strips file metadata while encoding. Matching crops from these full-size
+images **before** resizing the selected picture for the model. A small display image
+of the entire wall is never substituted for the uploaded reference. Rotating a
+reference transforms existing crop coordinates so picture mappings stay attached.
+
+Migration 0005 adds owner-scoped `wall_references` metadata in D1; image bytes are
+private R2 objects. Stable identity, same-origin writes, bounded uploads, JPEG size
+validation and revision checks protect edits. Images are immutable; upload another
+reference to replace an original. Deleting or excluding a reference or crop updates
+the matching fingerprint and reruns affected comparisons. Multiple active references,
+existing close-ups and the original wall crop contribute to the same suggestion queue.
+No personal images, face descriptors or saved mappings are committed to GitHub.

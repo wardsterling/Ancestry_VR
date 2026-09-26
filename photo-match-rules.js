@@ -1,6 +1,6 @@
 /* Shared validation for private, reviewable suggestions. Never identity claims. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.PhotoMatchRules=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
-  const VERSION='wall-faces-1',id=/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,119}$/;
+  const VERSION='wall-faces-2',id=/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,119}$/;
   function validate(value,catalog){
     if(!value||!id.test(value.photoId)||!['deceased','living'].includes(value.scope)||!/^[a-f0-9]{64}$/.test(value.fingerprint)||value.snapshotId!==catalog.snapshotId)throw Error('Reload the current archive before saving matches.');
     if(value.engine!==VERSION||!Array.isArray(value.matches)||value.matches.length>12)throw Error('Invalid photo matching result.');

@@ -37,14 +37,14 @@
     try{
       const list=candidates();sources=new Map(list.map(c=>[c.id,c]));
       if(!list.length)throw Error('No source photographs are available in this privacy view. Load the archive or enable living-person details to include their portraits.');
-      const [saved,closeups]=await Promise.all([json('/api/photo-matches?scope='+scope()),json('/api/photo-augments')]);if(!active())return;
+      const [saved,closeups,references]=await Promise.all([json('/api/photo-matches?scope='+scope()),json('/api/photo-augments'),json('/api/wall-references')]);if(!active())return;
       results=new Map(saved.results.map(r=>[r.photoId,r]));fresh.clear();loaded=true;
       const sourceKey=await hash(list),jobs=[];if(!active())return;
       for(const p of workspace().photos.filter(eligible)){
-        const augments=closeups.augments.filter(a=>a.photoId===p.id),fingerprint=await hash([window.PhotoMatchRules.VERSION,key,sourceKey,p.rect,augments.map(a=>[a.id,a.revision,a.enabled,a.crop,a.rotation])]);
+        const augments=closeups.augments.filter(a=>a.photoId===p.id),mapped=window.WallReferenceRules.queries(references.references,p.id),fingerprint=await hash([window.PhotoMatchRules.VERSION,key,sourceKey,p.rect,[...augments,...mapped].map(a=>[a.id,a.revision,a.enabled,a.crop,a.rotation])]);
         if(!active())return;
         if(!forceScan&&results.get(p.id)?.fingerprint===fingerprint&&results.get(p.id)?.faceAvailable&&results.get(p.id)?.unavailable===0)fresh.add(p.id);
-        else jobs.push({photo:p,fingerprint,queries:augments.some(a=>a.enabled)?augments.filter(a=>a.enabled):[{url:p.kind==='wall'?'assets/family-wall.jpg':window.SourceDocuments.source(app().documents,p.reportId,p.page)?.pageImage,crop:p.rect,rotation:0}]});
+        else jobs.push({photo:p,fingerprint,queries:[{url:p.kind==='wall'?'assets/family-wall.jpg':window.SourceDocuments.source(app().documents,p.reportId,p.page)?.pageImage,crop:p.rect,rotation:0},...augments.filter(a=>a.enabled),...mapped]});
       }
       forceScan=false;
       jobs.sort((a,b)=>Number(b.photo.id===workspace().selected?.id)-Number(a.photo.id===workspace().selected?.id));render();

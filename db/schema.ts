@@ -49,3 +49,15 @@ export const photoMatches = sqliteTable('photo_matches', {
   body: text('body').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, table => [primaryKey({ columns: [table.ownerId, table.photoId, table.scope] })]);
+
+// Full-resolution working photographs, shown only in the reference editor.
+export const wallReferences = sqliteTable('wall_references', {
+  ownerId: text('owner_id').notNull(),
+  id: text('id').notNull(),
+  objectKey: text('object_key').notNull(),
+  body: text('body').notNull(),
+  revision: integer('revision').notNull().default(1),
+  deleted: integer('deleted').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, table => [primaryKey({ columns: [table.ownerId, table.id] })]);
