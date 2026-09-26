@@ -1,5 +1,6 @@
 // Bundled with PhotoResearch and a private reference catalog by build-site.mjs.
 import '../photo-research.js';
+import {resolveArchiveIdentity,handleArchiveSession} from './archive-session.mjs';
 import {handlePhotoAugments} from './photo-augments.mjs';
 import {handlePhotoMatches} from './photo-matches.mjs';
 import {handleWallReferences} from './wall-references.mjs';
@@ -35,10 +36,12 @@ export async function handleResearch(request,env,catalog){
   }catch(error){console.error('Photo research request failed',error.message);return json({error:'The notebook could not be reached. Your draft is still here; try saving again.'},503);}
 }
 export default {async fetch(request,env){
-  const path=new URL(request.url).pathname,owner=request.headers.get('oai-authenticated-user-id');
+  const path=new URL(request.url).pathname;
   try{
+    if(path==='/api/session')return await handleArchiveSession(request,env);
+    if(path.startsWith('/api/'))request=await resolveArchiveIdentity(request,env);
+    const owner=request.headers.get('oai-authenticated-user-id');
     if(path==='/api/wall-references'||path.startsWith('/api/wall-references/'))return handleWallReferences(request,env,REFERENCE_CATALOG);
-    if(path==='/api/session')return request.method==='GET'?json(owner?{authenticated:true}:{error:'Sign in to load your private archive.'},owner?200:401):json({error:'Method not allowed.'},405);
     if(path==='/api/photo-matches'){
       if(!owner)return json({error:'Sign in to load saved wall matches.'},401);
       const catalog=await archiveCatalog(env,owner,REFERENCE_CATALOG);

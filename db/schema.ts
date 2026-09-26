@@ -1,5 +1,12 @@
 import { sqliteTable, text, integer, primaryKey, index } from 'drizzle-orm/sqlite-core';
 
+// Opaque session tokens are stored only as hashes after verified platform sign-in.
+export const archiveSessions = sqliteTable('archive_sessions', {
+  tokenHash: text('token_hash').primaryKey(),
+  ownerId: text('owner_id').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+}, table => [index('archive_sessions_expiry').on(table.expiresAt)]);
+
 // Each curator owns an evidence notebook. Geometry refers to original image coordinates.
 export const photoResearch = sqliteTable('photo_research', {
   ownerId: text('owner_id').notNull(),

@@ -7,6 +7,7 @@ function setup(saved=[],options={}){
  const photo={id:'wall1',kind:'wall',title:'Synthetic wall picture',rect:[1,2,10,20],claims:[],evidence:[]};
  const workspace={ready:true,photos:[photo],selected:null,selectPhoto(){}};
  const window={ArchiveApp:archive,PhotoWorkspace:workspace,PhotoResearch:require('../photo-research'),PhotoMatchRules:rules,WallReferenceRules:require('../wall-reference-rules'),ProfilePresentation:{safePortrait:s=>s},SourceDocuments:{source:()=>null},WallIdentification:{matchesChanged(){}},PhotoMatcher:{clear(){},async analyze(record,query){analysis.push({record,query});return {photos:[],faces:[Array(128).fill(.1)],faceAvailable:true};},rank:()=>options.noMatch?[]:[{id:'person:person1',personId:'person1',kind:'face',source:{reportId:'report',page:1}}]},addEventListener(){}};
+ if(options.align)window.WallAlignment={async process(references){return references.map(r=>({...r,regions:[{id:'auto-link',photoId:'wall1',crop:[10,10,20,20],enabled:true,origin:'automatic'}]}));}};
  const document={visibilityState:'visible',getElementById:node,addEventListener(){}};
  let augments=[],references=[];
  const context=vm.createContext({window,document,location:{hash:options.hash===undefined?'#wall':options.hash},localStorage:{getItem:()=>null},crypto:webcrypto,TextEncoder,fetch:async (url,opts={})=>{calls.push(url);if(options.failure&&url.startsWith('/api/photo-matches'))return {ok:false,json:async()=>({error:'Synthetic archive outage'})};if(url==='/api/wall-references')return {ok:true,json:async()=>({references})};if(url==='/api/photo-augments')return {ok:true,json:async()=>({augments})};if(opts.method==='PUT'){const result=JSON.parse(opts.body);writes.push(result);return {ok:true,json:async()=>({result})};}return {ok:true,json:async()=>({results:[...saved,...writes]})};},setTimeout:(fn,ms)=>{const id=setTimeout(()=>{timers.delete(id);fn();},Math.min(ms,2));timers.add(id);return id;},clearTimeout:id=>{clearTimeout(id);timers.delete(id);}});
@@ -31,4 +32,8 @@ test('background references augment the original crop and their edits or exclusi
  s.setReferences([reference]);s.window.WallMatches.changed();await s.settle();assert.equal(s.writes.length,2);assert.equal(s.analysis.filter(a=>a.query).at(-1).record.url,reference.url);assert(s.analysis.some(a=>a.query&&a.record.url==='assets/family-wall.jpg'));const fingerprint=s.writes.at(-1).fingerprint;
  reference.regions[0].crop=[20,20,25,30];reference.revision++;s.window.WallMatches.changed();await s.settle();assert.notEqual(s.writes.at(-1).fingerprint,fingerprint);
  const before=s.analysis.filter(a=>a.query&&a.record.url===reference.url).length;reference.enabled=false;reference.revision++;s.window.WallMatches.changed();await s.settle();assert.equal(s.analysis.filter(a=>a.query&&a.record.url===reference.url).length,before);
+});
+
+test('opening the wall aligns old unlinked references before querying source matches',async()=>{
+ const s=setup([],{align:true}),reference={id:'old-unlinked',url:'/api/wall-references/old-unlinked/image',label:'Earlier upload',width:4000,height:3000,rotation:0,revision:1,enabled:true,regions:[]};s.setReferences([reference]);await s.settle();assert(s.analysis.some(a=>a.query&&a.record.url===reference.url));assert.match(s.nodes.get('wallReferenceSummary').textContent,/1 enabled picture links/);
 });

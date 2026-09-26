@@ -2,6 +2,9 @@
 import {mkdir,copyFile} from 'node:fs/promises';
 import path from 'node:path';
 export async function buildPhotoMatcher(output){
+  await mkdir(path.join(output,'vendor/opencv'),{recursive:true});
+  await copyFile('node_modules/@techstark/opencv-js/dist/opencv.js',path.join(output,'vendor/opencv/opencv.js'));
+  await copyFile('node_modules/@techstark/opencv-js/LICENSE',path.join(output,'vendor/opencv/LICENSE'));
   const source='node_modules/@vladmandic/face-api',target=path.join(output,'vendor/face-api');
   await mkdir(path.join(target,'models'),{recursive:true});
   await copyFile(path.join(source,'dist/face-api.js'),path.join(target,'face-api.js'));

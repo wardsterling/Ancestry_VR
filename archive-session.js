@@ -13,22 +13,18 @@
     if(response.ok){document.getElementById('archiveSessionNotice').hidden=true;try{sessionStorage.removeItem('archive-signin-attempt');}catch{}return;}
     if(response.status===401){
       document.getElementById('archiveSignIn').href=signInPath();
-      let attempted=true;try{const at=Number(sessionStorage.getItem('archive-signin-attempt')||0);attempted=Date.now()-at<300000;if(!attempted)sessionStorage.setItem('archive-signin-attempt',String(Date.now()));}catch{}
-      show('Your private archive needs a refreshed sign-in. Saved photographs and research are kept.');
-      // One top-level sign-in attempt, before any archive edits can be made. Never loop.
-      if(!attempted&&window.top===window)location.replace(signInPath());
-      else show('The Site has not supplied your archive identity. Sign in to reconnect; if this continues, your saved archive remains protected.');
+      show('Your private archive could not confirm your identity. Retry connection or sign in again. Your saved photos and unsaved edits are kept.');
     }else show('Your private archive could not connect. Reload to try again.');
     throw Error('Private archive session unavailable.');
   }
-  function start(){return ready||(ready=connect().catch(error=>{show(error.message==='Failed to fetch'?'Connection interrupted. Reload to reconnect.':document.getElementById('archiveSessionMessage').textContent||error.message);throw error;}));}
+  function start(){return ready||(ready=connect().catch(error=>{ready=null;show(error.message==='Failed to fetch'?'Connection interrupted. Reload to reconnect.':document.getElementById('archiveSessionMessage').textContent||error.message);throw error;}));}
   window.fetch=async (input,options={})=>{
     const url=new URL(typeof input==='string'?input:input.url,location.href);
     if(url.origin!==location.origin||!url.pathname.startsWith('/api/'))return originalFetch(input,options);
     await start();
     const response=await originalFetch(input,{credentials:'same-origin',...options});
-    if(response.status===401){show('Your session expired. Sign in again to resume. Unsaved edits remain on this page.');document.getElementById('archiveSignIn').href=signInPath();}
+    if(response.status===401){ready=null;show('Your session expired. Sign in again to resume. Unsaved edits remain on this page.');document.getElementById('archiveSignIn').href=signInPath();}
     return response;
   };
-  document.getElementById('archiveReconnect').addEventListener('click',()=>location.reload());
+  document.getElementById('archiveReconnect').addEventListener('click',async()=>{ready=null;try{await start();await window.ArchiveApp?.reload();await window.PhotoWorkspace?.reload?.();window.WallMatches?.changed();}catch{}});
 })();

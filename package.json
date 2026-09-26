@@ -7,6 +7,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "devDependencies": {
+    "@techstark/opencv-js": "4.12.0-release.1",
     "@vladmandic/face-api": "1.7.15",
     "drizzle-kit": "0.31.10",
     "drizzle-orm": "0.45.2",

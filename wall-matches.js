@@ -3,7 +3,7 @@
   'use strict';
   const $=id=>document.getElementById(id),app=()=>window.ArchiveApp,workspace=()=>window.PhotoWorkspace;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  let epoch=0,running=false,context='',timer,enabled=true,results=new Map(),sources=new Map(),fresh=new Set(),lastError='',progress='',loaded=false,forceScan=false;
+  let epoch=0,running=false,context='',timer,enabled=true,results=new Map(),sources=new Map(),fresh=new Set(),lastError='',progress='',loaded=false,forceScan=false,referenceSummary='';
   const requested=new Set();
   try{enabled=localStorage.getItem('wall-auto-matches')!=='off';}catch{}
   const scope=()=>app()?.showLiving?'living':'deceased';
@@ -22,6 +22,7 @@
   function forPhoto(id){const result=results.get(id);return result&&fresh.has(id)&&allowed(workspace()?.photos.find(p=>p.id===id)||{})?{...result,matches:visibleMatches(result)}:null;}
   function render(){
     $('wallAutoMatch').checked=enabled;
+    $('wallReferenceSummary').textContent=referenceSummary;
     const wall=workspace()?.photos.filter(p=>p.kind==='wall'&&allowed(p))||[],pending=wall.filter(eligible),matched=pending.filter(p=>forPhoto(p.id)?.matches.length);
     $('wallMatchStatus').textContent=lastError||progress||(!app()?.ready?(app()?.error||'Waiting for the source archive…'):!workspace()?.ready?'Waiting for saved picture records…':!enabled?'Automatic matching paused.':loaded?`${fresh.size} pictures checked · ${matched.length} with suggestions. New close-ups and reports are checked automatically.`:'Preparing automatic matches…');
     $('wallMatchProgress').hidden=!running;$('wallMatchProgress').max=Math.max(1,pending.length);$('wallMatchProgress').value=fresh.size;
@@ -39,6 +40,9 @@
       if(!list.length)throw Error('No source photographs are available in this privacy view. Load the archive or enable living-person details to include their portraits.');
       const [saved,closeups,references]=await Promise.all([json('/api/photo-matches?scope='+scope()),json('/api/photo-augments'),json('/api/wall-references')]);if(!active())return;
       results=new Map(saved.results.map(r=>[r.photoId,r]));fresh.clear();loaded=true;
+      if(enabled&&window.WallAlignment){references.references=await window.WallAlignment.process(references.references,workspace().photos,{onProgress:message=>{if(active()){progress=message;render();}}});if(!active())return;}
+      const working=references.references.filter(r=>r.enabled),linked=working.reduce((n,r)=>n+r.regions.filter(c=>c.enabled).length,0),review=working.filter(r=>r.alignment?.status==='review').length,failed=working.filter(r=>r.alignmentError).length;
+      referenceSummary=working.length?`${working.length} background photos · ${linked} enabled picture links${review?' · '+review+' need alignment review':''}${failed?' · '+failed+' could not align; retry in Improve photo matching':''}.`:'';
       const sourceKey=await hash(list),jobs=[];if(!active())return;
       for(const p of workspace().photos.filter(eligible)){
         const augments=closeups.augments.filter(a=>a.photoId===p.id),mapped=window.WallReferenceRules.queries(references.references,p.id),fingerprint=await hash([window.PhotoMatchRules.VERSION,key,sourceKey,p.rect,[...augments,...mapped].map(a=>[a.id,a.revision,a.enabled,a.crop,a.rotation])]);

@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync('index.html','utf8'),code=fs.readFileSync('wall-references.js','utf8');
-function setup(){
+function setup(automatic=false){
   const nodes=new Map(),handlers={},saved=new Map(),requests=[],fail=new Set();let changed=0;
   class Element{
     constructor(id,tag){Object.assign(this,{id,tag,handlers:{},value:'',innerHTML:'',textContent:'',hidden:false,disabled:false,checked:true,style:{},classList:{toggle(){}}});nodes.set(id,this);}
@@ -15,6 +15,7 @@ function setup(){
   const document={getElementById:id=>nodes.get(id),addEventListener(type,fn){(handlers[type]||=[]).push(fn);},createElement(tag){assert.equal(tag,'canvas');return {width:0,height:0,getContext:()=>context2d,toBlob:fn=>fn(new Blob(['synthetic JPEG'],{type:'image/jpeg'})),toDataURL:()=> 'data:image/jpeg;base64,c3ludGhldGlj'};}};
   class Image{constructor(){this.width=8000;this.height=2000;}set src(value){this.url=value;queueMicrotask(()=>this.onload());}}
   const window={WallReferenceRules:require('../wall-reference-rules'),confirm:()=>true,addEventListener(){},ArchiveApp:{profiles:[],showLiving:false},PhotoWorkspace:{photos:[{id:'wall1',kind:'wall',title:'Picture one',rect:[0,0,5,10]},{id:'wall2',kind:'wall',title:'Picture two',rect:[10,0,5,10]}],selected:{id:'wall1'}},WallMatches:{changed(){changed++;}},PhotoMatcher:{async analyze(){return {faceAvailable:true,faces:[[.1,.2]],faceBoxes:[[10,20,30,40]]};},async preview(){return 'data:image/jpeg;base64,c3ludGhldGlj';}}};
+  const alignmentCalls=[];if(automatic)window.WallAlignment={async process(records){alignmentCalls.push(...records.map(r=>r.id));return records.map(r=>{const aligned={...r,revision:r.revision+1,alignment:{engine:'wall-align-1',status:'aligned'},regions:[{id:'auto-link',photoId:'wall1',crop:[10,10,20,20],enabled:true,origin:'automatic'}]};saved.set(r.id,aligned);return aligned;});}};
   const fetch=async(url,options={})=>{
     const method=options.method||'GET';requests.push({url,method});
     if(method==='GET')return {ok:true,json:async()=>({references:[...saved.values()]})};
@@ -24,7 +25,7 @@ function setup(){
     return {ok:true,json:async()=>({reference})};
   };
   vm.runInNewContext(code,{window,document,Image,fetch,URL,FormData,Blob,structuredClone,crypto:require('node:crypto').webcrypto});
-  return {nodes,window,saved,fail,requests,get changed(){return changed;},async click(key,id){const target={closest:selector=>selector==='[data-'+key+']'?{dataset:{[key.replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]:id}}:null};for(const fn of handlers.click||[])await fn({target});}};
+  return {nodes,window,saved,fail,requests,alignmentCalls,get changed(){return changed;},async click(key,id){const target={closest:selector=>selector==='[data-'+key+']'?{dataset:{[key.replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]:id}}:null};for(const fn of handlers.click||[])await fn({target});}};
 }
 test('bulk uploads preserve failed items for retry and keep editable references inside their manager',async()=>{
   const app=setup();await app.window.WallReferences.open();app.fail.add('Second');
@@ -49,4 +50,9 @@ test('picture crop links survive save, rotation and reload; failed saves preserv
   await n('referenceRotate').emit('click');app.fail.add('First');await n('referenceSave').emit('click');assert.match(n('wallReferenceStatus').textContent,/edits are still here/);assert.equal([...app.saved.values()][0].rotation,0);
   await n('referenceSave').emit('click');record=[...app.saved.values()][0];assert.equal(record.rotation,90);assert.deepEqual(Array.from(record.regions[0].crop),[70,10,20,5]);
   await n('referenceClose').emit('click');await app.window.WallReferences.open();await app.click('reference-edit',record.id);assert.match(n('referenceLinkedCrops').innerHTML,/Picture one/);assert.match(n('referenceLinkedCrops').innerHTML,/Picture two/);
+});
+
+test('every newly uploaded wall photo automatically aligns and triggers source matching without drawing a crop',async()=>{
+ const app=setup(true);await app.window.WallReferences.open();const input=app.nodes.get('referenceFiles');input.files=[new File(['one'],'New full wall.jpg'),new File(['two'],'New wall section.jpg')];await input.emit('change');
+ assert.equal(app.alignmentCalls.length,2);assert.equal(app.saved.size,2);assert.equal(app.changed,2);assert([...app.saved.values()].every(r=>r.regions.length===1&&r.regions[0].origin==='automatic'));assert.match(app.nodes.get('referenceLinkedCrops').innerHTML,/Automatically linked/);assert.match(app.nodes.get('wallReferenceStatus').textContent,/picture links saved/);
 });

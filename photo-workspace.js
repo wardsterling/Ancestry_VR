@@ -278,7 +278,7 @@
     pullFields();const photoId=selected,prior=structuredClone(current());
     try{const value=rules.connectSourcePerson(current(),person,doc,note,{claimId:uid('claim'),evidenceId:uid('evidence')},catalog());if(confirmed)value.claims.find(c=>c.profileId===personId&&c.status!=='rejected').status='confirmed';drafts.set(photoId,value);dirty=true;renderEditor();const ok=await save();if(!ok){drafts.set(photoId,prior);dirty=JSON.stringify(prior)!==JSON.stringify(records.get(photoId));}if(selected===photoId)renderEditor();return ok;}catch(e){message(e.message,true);return false;}
   }
-  window.PhotoWorkspace={get ready(){return ready&&notebookLoaded;},get selected(){return current();},get photos(){return [...records.values()];},get busy(){return saving;},ensureSaved:save,connectInline,selectPhoto,startWallDrawing,exportNotebook,importNotebook,archiveChanged,profileChanged,sourceChanged};
+  window.PhotoWorkspace={get ready(){return ready&&notebookLoaded;},get selected(){return current();},get photos(){return [...records.values()];},get busy(){return saving;},reload:load,ensureSaved:save,connectInline,selectPhoto,startWallDrawing,exportNotebook,importNotebook,archiveChanged,profileChanged,sourceChanged};
   async function load(){
     const results=await Promise.allSettled([fetch('wall-catalog.json',{cache:'no-store'}).then(async r=>r.ok?(await r.json()).regions:[]),fetch('/api/photo-research',{cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Saved research is unavailable. Try reloading; unsaved drafts can be exported.');return (await r.json()).records;})]);
     if(results[0].status==='fulfilled')for(const p of results[0].value||[])records.set(p.id,p);

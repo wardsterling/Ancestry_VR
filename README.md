@@ -450,9 +450,10 @@ inputs are compared again. Living-person toggles clear incompatible in-memory re
 Confirmation remains explicit; a machine suggestion never removes an unknown person.
 
 Private builds first resolve `/api/session` before loading owner-scoped records.
-Transient missing identity gets bounded retries; the top-level browser can initiate
-one dispatch-owned ChatGPT sign-in. Repeated failure displays a reconnect action,
-without redirect loops, email-based ownership fallbacks or access-policy changes.
+Transient missing identity gets bounded retries and can reuse a previously verified
+short-lived server session. Repeated failure displays a reconnect action and an
+explicit sign-in link, without redirecting away from edits, caching a failed
+connection forever, using email as ownership or changing access policies.
 Mid-session expiration preserves unsaved drafts and asks the user to reconnect.
 
 Close-up images, archive data and saved suggestions stay in the private Site. GitHub
@@ -468,10 +469,11 @@ individual close-ups can be mixed. The upload queue retains failed files for ret
 successful files are already saved. These working images are only visible in this
 manager and never replace the displayed wall or enter archive galleries/collections.
 
-Choose a picture from the original wall, draw around the same frame in the reference,
-and save. **Link another picture** adds another mapping from the same uploaded image;
-several references can improve the same wall picture. Mappings are explicit: the app
-does not assume two differently framed wall photographs share pixel coordinates.
+Uploads automatically align with the original wall and save reliable picture links.
+For a photo marked for review, choose an original picture, draw around the same frame
+in the reference, and save. **Link another picture** adds another mapping; several
+references can improve the same wall picture. The app calculates a transformation
+between photographs instead of assuming that they share pixel coordinates.
 The editor provides zoom, rotation, numeric crop adjustments, labels, inclusion
 switches, removal and a local **Check crop for faces** preview. Detection is not an
 identity decision. All inferred source connections still require curator review.
@@ -489,3 +491,33 @@ reference to replace an original. Deleting or excluding a reference or crop upda
 the matching fingerprint and reruns affected comparisons. Multiple active references,
 existing close-ups and the original wall crop contribute to the same suggestion queue.
 No personal images, face descriptors or saved mappings are committed to GitHub.
+
+### Automatic wall alignment
+
+New background photo uploads run geometric alignment immediately after saving. On
+opening Explore Wall, older references without an alignment attempt are processed
+before source-photo matching. No re-upload or manual crop is required for reliable
+overlapping areas. The browser compares photograph features with the original wall,
+estimates a perspective transformation with RANSAC, and maps marked picture regions
+into each reference. This step matches image locations, not a person's identity.
+
+OpenCV 4.12 is pinned and self-hosted. Registration runs in a dedicated Web Worker;
+images and feature descriptors remain on the device. Unrelated, blank, insufficiently
+overlapping, or geometrically uncertain images stay unlinked and are marked for
+review. Automatic links are editable in the existing manager. Re-running alignment
+preserves manually edited links and exclusions. Failed saves remain retryable;
+already completed references are not silently recalculated on every visit. The wall
+shows the number of background photos and enabled links, including review/failure
+counts. Automatic matching must be enabled and the wall page open for the scan queue.
+
+### Resilient private sessions
+
+The Site issues an eight-hour opaque, HttpOnly, Secure, SameSite=Strict session cookie
+only after receiving the platform's stable authenticated user ID. D1 stores only the
+random token's SHA-256 hash, owner ID and expiration. Subsequent requests can use that
+verified session when the platform transiently omits its identity header. An email,
+name, arbitrary cookie or missing/expired session never grants access. A different
+verified user takes precedence over an older cookie. Existing Site access restrictions
+remain enforced by hosting. Before the first verified session, platform sign-in must
+still succeed. Retry connection rechecks identity and reloads the archive/notebook
+without discarding the page or permanently caching a rejected connection promise.

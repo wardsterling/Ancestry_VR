@@ -10,9 +10,11 @@
     if(!Array.isArray(input.regions)||input.regions.length>240)throw Error('Use up to 240 picture crops per image.');
     const ids=new Set(),regions=input.regions.map(region=>{
       if(!region||!idPattern.test(region.id)||ids.has(region.id)||!idPattern.test(region.photoId)||wallIds&&!wallIds.includes(region.photoId))throw Error('Link each crop to a wall picture.');
-      ids.add(region.id);return {id:region.id,photoId:region.photoId,crop:rectangle(region.crop),enabled:region.enabled!==false};
+      ids.add(region.id);return {id:region.id,photoId:region.photoId,crop:rectangle(region.crop),enabled:region.enabled!==false,...(region.origin==='automatic'?{origin:'automatic'}:{})};
     });
-    return {id:input.id,label:String(input.label||'Wall reference').trim().slice(0,160)||'Wall reference',width:input.width,height:input.height,rotation:input.rotation,enabled:input.enabled!==false,regions};
+    let alignment;
+    if(input.alignment){const a=input.alignment;if(a.engine!=='wall-align-1'||!['aligned','review'].includes(a.status)||!Number.isInteger(a.inliers)||a.inliers<0||a.inliers>100000)throw Error('Invalid alignment result.');alignment={engine:a.engine,status:a.status,inliers:a.inliers,error:Number.isFinite(a.error)?Math.max(0,a.error):0,reason:String(a.reason||'').slice(0,300),added:Number.isInteger(a.added)?Math.max(0,a.added):0,checkedAt:String(a.checkedAt||'').slice(0,40)};}
+    return {id:input.id,label:String(input.label||'Wall reference').trim().slice(0,160)||'Wall reference',width:input.width,height:input.height,rotation:input.rotation,enabled:input.enabled!==false,regions,...(alignment?{alignment}:{})};
   }
   function queries(references,photoId){return references.filter(r=>r.enabled&&!r.deleted).flatMap(r=>r.regions.filter(p=>p.enabled&&p.photoId===photoId).map(p=>({id:r.id+':'+p.id,photoId,label:r.label,url:r.url,crop:p.crop,rotation:r.rotation,revision:r.revision,enabled:true,width:r.width,height:r.height})));}
   function rotateCrop(crop){const [x,y,w,h]=crop;return rectangle([100-y-h,x,h,w]);}

@@ -9,7 +9,7 @@ function setup(statuses,storage=new Map()){
 test('concurrent archive reads wait for stable identity, with a bounded retry',async()=>{
  const s=setup([401,200]);const responses=await Promise.all([s.window.fetch('/api/archive/archive'),s.window.fetch('/api/photo-research')]);assert(responses.every(r=>r.ok));assert.deepEqual(s.calls.slice(0,2),['/api/session','/api/session']);assert.equal(s.redirects.length,0);
 });
-test('missing identity initiates top-level sign-in once and never loads owner data',async()=>{
- const s=setup([401,401,401]);await assert.rejects(s.window.fetch('/api/archive/archive'));assert.equal(s.redirects.length,1);assert.match(s.redirects[0],/^\/signin-with-chatgpt\?return_to=/);assert(s.calls.every(c=>c==='/api/session'));
- const again=setup([401,401,401],s.storage);await assert.rejects(again.window.fetch('/api/archive/archive'));assert.equal(again.redirects.length,0);assert.equal(again.nodes.get('archiveSessionNotice').hidden,false);
+test('missing identity preserves the page and a later retry can recover without reloading',async()=>{
+ const s=setup([401,401,401,200]);await assert.rejects(s.window.fetch('/api/archive/archive'));assert.equal(s.redirects.length,0);assert(s.calls.every(c=>c==='/api/session'));assert.equal(s.nodes.get('archiveSessionNotice').hidden,false);
+ const response=await s.window.fetch('/api/archive/archive');assert.equal(response.status,200);assert.equal(s.nodes.get('archiveSessionNotice').hidden,true);
 });
