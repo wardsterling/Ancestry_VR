@@ -98,7 +98,8 @@
         if (query.range && !e.years.some(y => Number(y) >= query.range.from && Number(y) <= query.range.to)) continue;
         if (options.name && !matchFields(e.fields.filter(f=>f.kind==='name'),parseQuery(options.name),options.fuzzy !== false)) continue;
         if (options.place && !matchFields(e.fields.filter(f=>f.kind==='place'),parseQuery(options.place),false,true)) continue;
-        const fields = options.scope && options.scope !== 'all' ? e.fields.filter(f=>f.kind===options.scope) : e.fields;
+        // Person browsing matches names/aliases and visible life details, not the report title.
+        const fields = options.scope === 'person' ? e.fields.filter(f=>f.kind!=='source') : options.scope && options.scope !== 'all' ? e.fields.filter(f=>f.kind===options.scope) : e.fields;
         const match = matchFields(fields, query, options.fuzzy !== false, options.scope === 'place');
         if (!match) continue;
         const whole = normalize(raw);

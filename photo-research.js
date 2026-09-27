@@ -89,20 +89,22 @@
   function status(photo){return photo.claims?.some(c=>c.status==='confirmed')?(photo.unidentifiedPeople?'partly identified':'confirmed'):photo.claims?.some(c=>c.status==='proposed')?'proposed':'unidentified';}
   function cropStyle(rect){const [x,y,w,h]=rectangle(rect);return `aspect-ratio:${w}/${h};background-size:${10000/w}% ${10000/h}%;background-position:${w===100?0:x/(100-w)*100}% ${h===100?0:y/(100-h)*100}%`;}
   function fromPoints(a,b){const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y);return rectangle([x,y,Math.abs(a.x-b.x),Math.abs(a.y-b.y)]);}
-  function groupPortraits(profiles,{sort='name',source='',query=''}={},family){
+  function groupPortraits(profiles,{sort='name',source='',query='',includeWithoutPortrait=false}={},family){
     const norm=s=>String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const words=norm(query).split(/\s+/).filter(Boolean),rows=[];
     for(const p of profiles){
-      if(p.restricted||!p.portrait?.src||!words.every(w=>norm(p.name+' '+(p.places||[]).join(' ')).includes(w)))continue;
+      if(!includeWithoutPortrait&&(p.restricted||!p.portrait?.src))continue;
+      const searchable=[p.name,...(p.aliases||[]),...(p.restricted?[]:p.places||[])].join(' ');
+      if(!words.every(w=>norm(searchable).includes(w)))continue;
       const sources=(p.sources||[]).filter(s=>!source||s.reportId===source);if(source&&!sources.length)continue;
-      let keys=['All portraits'];
+      let keys=[includeWithoutPortrait?'All people':'All portraits'];
       if(sort==='source')keys=[...new Set(sources.map(s=>s.title))];
       if(sort==='family')keys=[...new Set(sources.map(s=>{const parents=family?.relatives(p.id,s.reportId).parents||[];return parents.length?'Family of '+parents.map(x=>x.name).sort().join(' & '):s.title+' · Family unassigned';}))];
       if(sort==='generation')keys=[...new Set(sources.map(s=>s.title+' · Generation '+(family?.generation(p.id,s.reportId)??'unassigned')))];
       for(const key of keys.length?keys:['Source unassigned'])rows.push({key,profile:p});
     }
     const groups=new Map();for(const {key,profile} of rows){if(!groups.has(key))groups.set(key,[]);groups.get(key).push(profile);}
-    return [...groups].sort(([a],[b])=>a.localeCompare(b,undefined,{numeric:true})).map(([label,people])=>({label,people:people.sort((a,b)=>sort==='oldest'?((a.birthYear||9999)-(b.birthYear||9999))||a.name.localeCompare(b.name):sort==='surname'?a.name.split(' ').at(-1).localeCompare(b.name.split(' ').at(-1))||a.name.localeCompare(b.name):a.name.localeCompare(b.name))}));
+    return [...groups].sort(([a],[b])=>a.localeCompare(b,undefined,{numeric:true})).map(([label,people])=>({label,people:people.sort((a,b)=>sort==='oldest'?((a.restricted?9999:a.birthYear||9999)-(b.restricted?9999:b.birthYear||9999))||a.name.localeCompare(b.name):sort==='surname'?a.name.split(' ').at(-1).localeCompare(b.name.split(' ').at(-1))||a.name.localeCompare(b.name):a.name.localeCompare(b.name))}));
   }
   return {awaitingIdentification,validate,rectangle,fromPoints,safeUrl,status,cropStyle,groupPortraits,connectSourcePerson,redirectReferences};
 });

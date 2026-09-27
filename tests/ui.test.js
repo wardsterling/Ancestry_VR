@@ -386,3 +386,31 @@ test('broken-link review offers preserve or reconnect and keeps failed saves ava
  app.nodes.get('archiveLinkReviewForm').emit('submit');await tick();assert.equal(calls[0].choices.old,'synthetic');assert.equal(app.nodes.get('archiveLinkReview').open,true);assert.match(app.nodes.get('archiveLinkReviewStatus').textContent,/original PDF remains saved/);
  app.nodes.get('archiveLinkReviewForm').emit('submit');await tick();assert.equal(app.nodes.get('archiveLinkReview').open,false);
 });
+
+test('report surname search returns every source person, counts portraits separately, paginates and refreshes after imports',async()=>{
+ const source={reportId:'demo',title:'Synthetic report',page:1};
+ const people=Array.from({length:35},(_,i)=>({...fixture.profiles[0],id:'wilson-'+i,name:'Person '+String(i).padStart(2,'0')+' Wilson',aliases:[],sources:[source],portrait:i<2?{src:'assets/example-'+i+'.jpg'}:null}));
+ people.push({...fixture.profiles[0],id:'alias-only',name:'Changed Surname',aliases:['Former Wilson'],sources:[source]});
+ people.push({...fixture.profiles[0],id:'restricted',name:'Private Wilson',aliases:[],restricted:true,portrait:{src:'assets/hidden-wilson.jpg'},sources:[source]});
+ people.push({...fixture.profiles[0],id:'title-only',name:'Unrelated Person',aliases:[],sources:[{reportId:'other',title:'The Wilson Report',page:1}]});
+ const archive={profiles:people,documents:[{id:'demo',title:'Synthetic report',url:'source-documents/demo.pdf',pages:1},{id:'other',title:'The Wilson Report',url:'source-documents/other.pdf',pages:1}]};
+ const app=await setup(false,'#wall',false,archive),n=id=>app.nodes.get(id);n('portraitQuery').value='Wilson';n('portraitQuery').emit('input');
+ assert.match(n('portraitSummary').textContent,/37 matching people · 2 with visible portraits · 35 without a visible portrait · showing 24/);assert.equal(n('morePortraits').hidden,false);assert.match(n('portraitGallery').innerHTML,/No photo yet/);assert.match(n('portraitGallery').innerHTML,/data-source-id="demo"/);assert.doesNotMatch(n('portraitGallery').innerHTML,/Unrelated Person|hidden-wilson\.jpg/);
+ n('morePortraits').emit('click');assert.match(n('portraitSummary').textContent,/showing 37/);assert.match(n('portraitGallery').innerHTML,/Private Wilson/);assert.match(n('portraitGallery').innerHTML,/Details restricted/);assert.match(n('portraitGallery').innerHTML,/focus=alias-only/);assert.equal(n('morePortraits').hidden,true);
+ n('portraitVisibility').value='portraits';n('portraitVisibility').emit('change');assert.match(n('portraitSummary').textContent,/37 matching people/);assert.match(n('portraitSummary').textContent,/showing 2 · Portraits only/);
+ n('clearPortraitFilters').emit('click');assert.equal(n('portraitVisibility').value,'all');assert.equal(n('portraitQuery').value,'');
+ n('portraitQuery').value='Wilson';n('portraitQuery').emit('input');people.push({...fixture.profiles[0],id:'new-upload',name:'New Wilson',aliases:[],sources:[source]});await app.window.ArchiveApp.reload();assert.match(n('portraitSummary').textContent,/38 matching people/);
+});
+
+test('report person search respects source and living-detail filters while keeping names findable for all surnames',async()=>{
+ const source={reportId:'demo',title:'Synthetic report',page:1};
+ const person={...fixture.profiles[0],id:'private-person',name:'Private García',aliases:['Private O’Neill'],restricted:true,extractionVersion:2,portrait:{src:'assets/hidden.jpg'},sources:[source]};
+ const archive={snapshotId:'search-snapshot',livingDetailsAvailable:true,profiles:[person],documents:[{id:'demo',title:'Synthetic report',url:'source-documents/demo.pdf',pages:1}]};
+ const details={snapshotId:archive.snapshotId,profiles:{'private-person':{birthDate:'5 May 2001',birthYear:2001,years:['2001'],birthPlace:'Hidden Town',places:['Hidden Town'],portrait:{src:'assets/hidden.jpg'}}}};
+ const app=await setup(false,'#wall',false,archive,{snapshotId:archive.snapshotId,memberships:[],edges:[]},details),n=id=>app.nodes.get(id);
+ for(const query of ['garcia',"o'neill"]){n('portraitQuery').value=query;n('portraitQuery').emit('input');assert.match(n('portraitSummary').textContent,/1 matching people · 0 with visible portraits/);assert.match(n('portraitGallery').innerHTML,/Private García/);assert.doesNotMatch(n('portraitGallery').innerHTML,/2001|Hidden Town|assets\/hidden/);}
+ n('portraitQuery').value='Hidden Town';n('portraitQuery').emit('input');assert.match(n('portraitSummary').textContent,/0 matching people/);
+ n('showLiving').checked=true;n('showLiving').emit('change');await new Promise(resolve=>setImmediate(resolve));assert.match(n('portraitSummary').textContent,/1 matching people · 1 with visible portraits/);assert.match(n('portraitGallery').innerHTML,/assets\/hidden.jpg/);
+ n('showLiving').checked=false;n('showLiving').emit('change');assert.match(n('portraitSummary').textContent,/0 matching people/);
+ n('portraitQuery').value='Garcia';n('portraitSource').value='another-report';n('portraitSource').emit('change');assert.match(n('portraitSummary').textContent,/0 matching people/);
+});

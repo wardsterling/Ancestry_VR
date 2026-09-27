@@ -53,3 +53,12 @@ test('saved source connections leave unknowns retrospectively without promoting 
  assert.equal(rules.awaitingIdentification({...p,evidence:[]},refs),true);
  assert.equal(rules.awaitingIdentification(p,{...catalog,profileAliases:{old:{targets:['p1','p2']}}}),true);
 });
+
+test('all-people report browsing includes people with no portrait and restricted names in every grouping',()=>{
+ const sources=[{reportId:'report',title:'Sample report',page:1}];
+ const people=[{id:'a',name:'Ada Wilson',sources,portrait:{src:'a.jpg'}},{id:'b',name:'Beth Wilson',sources},{id:'c',name:'Cara Turner',aliases:['Cara Wilson'],sources},{id:'d',name:'Dale Wilson',sources,restricted:true,places:['Hidden town'],portrait:{src:'hidden.jpg'}}];
+ const family=new Family(people,{memberships:people.map(p=>({profileId:p.id,reportId:'report',generation:1})),edges:[]});
+ for(const sort of ['name','surname','source','family','generation','oldest'])assert.deepEqual(new Set(rules.groupPortraits(people,{sort,query:'Wilson',includeWithoutPortrait:true},family).flatMap(g=>g.people.map(p=>p.id))),new Set(['a','b','c','d']));
+ assert.equal(rules.groupPortraits(people,{query:'Hidden town',includeWithoutPortrait:true},family).length,0);
+ assert.deepEqual(rules.groupPortraits(people,{query:'Wilson'},family)[0].people.map(p=>p.id),['a']);
+});

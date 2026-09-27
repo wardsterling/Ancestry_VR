@@ -60,3 +60,17 @@ test('long or punctuation-only queries are bounded and safe',()=>{
   assert.doesNotThrow(()=>index.search('<img src=x onerror=alert(1)>'));
   assert.deepEqual(index.suggest(''),[]);
 });
+
+test('person search includes aliases and visible life details without matching unrelated report-title surnames',()=>{
+ const rows=[
+  {id:'name',name:'Ada Wilson',sources:[{reportId:'r',title:'Other family'}]},
+  {id:'alias',name:'Ada Turner',aliases:['Ada Wilson'],sources:[{reportId:'r',title:'Other family'}]},
+  {id:'title-only',name:'Beth Smith',sources:[{reportId:'w',title:'Descendants of Wilson'}]},
+  {id:'hidden',name:'Cara Wilson',restricted:true,places:['Secret City'],years:['2020'],sources:[{reportId:'r',title:'Other family'}]}
+ ];
+ const index=new Index(rows);
+ assert.deepEqual(new Set(index.search('wilson',{scope:'person',fuzzy:false}).map(r=>r.profile.id)),new Set(['name','alias','hidden']));
+ assert.equal(index.search('Secret City',{scope:'person',fuzzy:false}).length,0);
+ assert.equal(index.search('2020',{scope:'person',fuzzy:false}).length,0);
+ assert.equal(index.search('Wilson',{scope:'person',source:'w',fuzzy:false}).length,0);
+});

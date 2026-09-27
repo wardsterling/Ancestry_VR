@@ -148,13 +148,27 @@
     if(push){writeRoute(true);$('#familyConnections').scrollIntoView?.({behavior:explorer.reduced()?'auto':'smooth',block:'start'});}
   }
   function renderGallery(){
-    const choices={sort:$('#portraitSort').value||'name',source:$('#portraitSource').value,query:$('#portraitQuery').value};
-    const photos=profiles.map(p=>({...p,portrait:p.portrait||{src:window.ProfilePresentation.describe(p,window.LFW_DATA?.people||{}).portrait}}));
-    const groups=window.PhotoResearch.groupPortraits(photos,choices,explorer.family),total=groups.reduce((n,g)=>n+g.people.length,0),unique=new Set(groups.flatMap(g=>g.people.map(p=>p.id))).size;
-    $('#portraitSummary').textContent=unique+' matching portraits · select a person to open their tree'+(total>unique?' · some people appear in multiple family groups':'');
+    const choices={sort:$('#portraitSort').value||'name',source:$('#portraitSource').value,includeWithoutPortrait:$('#portraitVisibility').value!=='portraits'};
+    // Search the full projected archive before deciding how to display photographs.
+    const matched=index?index.search($('#portraitQuery').value,{source:choices.source,scope:'person',fuzzy:false}).map(r=>r.profile):[];
+    const photos=matched.map(p=>({...p,portrait:{...p.portrait,src:window.ProfilePresentation.describe(p,window.LFW_DATA?.people||{}).portrait}}));
+    const allCount=new Set(photos.map(p=>p.id)).size,withPortrait=new Set(photos.filter(p=>p.portrait.src).map(p=>p.id)).size;
+    const groups=window.PhotoResearch.groupPortraits(photos,choices,explorer.family),total=groups.reduce((n,g)=>n+g.people.length,0),unique=new Set(groups.flatMap(g=>g.people.map(p=>p.id))).size,shown=new Set();
     let left=portraitLimit;
-    $('#portraitGallery').innerHTML=groups.map(g=>{const people=g.people.slice(0,left);left-=people.length;if(!people.length)return '';return (groups.length>1?`<h3 class="portrait-group-heading">${escape(g.label)}</h3>`:'')+people.map(p=>`<article class="report-portrait-card"><a data-profile-id="${escape(p.id)}" href="${escape(Model.link({focus:p.id,person:p.id}))}">${explorer.portrait(p)}<strong>${escape(p.name)}</strong></a><small>${p.portrait?.source?sourceLink(p.portrait.source,'Report · page '+p.portrait.source.page):'Pilot portrait'}</small></article>`).join('');}).join('')||'<p>No portraits match these filters. Living-person portraits follow the switch above.</p>';
+    $('#portraitGallery').innerHTML=groups.map(g=>{
+      const people=g.people.slice(0,left);left-=people.length;if(!people.length)return '';
+      return (groups.length>1?`<h3 class="portrait-group-heading">${escape(g.label)}</h3>`:'')+people.map(p=>{
+        shown.add(p.id);
+        const pages=[...new Map(p.sources.filter(s=>!choices.source||s.reportId===choices.source).map(s=>[s.reportId+'|'+s.page,s])).values()];
+        const citations=pages.slice(0,2).map(s=>sourceLink(s,s.title+' · page '+s.page)).join('<br>');
+        const photoSource=p.portrait?.src&&p.portrait.source?sourceLink(p.portrait.source,'Portrait · page '+p.portrait.source.page):'';
+        return `<article class="report-portrait-card"><a data-profile-id="${escape(p.id)}" href="${escape(Model.link({focus:p.id,person:p.id}))}">${explorer.portrait(p)}<strong>${escape(p.name)}</strong></a><small>${escape(dates(p))}</small><small>${citations||'Source link awaiting review'}${pages.length>2?'<br>More source pages in this person’s tree':''}</small>${photoSource?`<small>${photoSource}</small>`:''}</article>`;
+      }).join('');
+    }).join('')||`<p>${allCount&&!choices.includeWithoutPortrait?'People match your search, but none has a visible portrait. Choose All people to see their names and source pages.':'No people match these filters. Try a recorded name or alias, place, or year, or clear the source filter.'}</p>`;
+    $('#portraitSummary').textContent=`${allCount.toLocaleString()} matching people · ${withPortrait.toLocaleString()} with visible portraits · ${(allCount-withPortrait).toLocaleString()} without a visible portrait · showing ${shown.size.toLocaleString()}${!choices.includeWithoutPortrait?' · Portraits only filter is on':''}${total>unique?' · some people appear in multiple groups':''} · select a person to open their tree`;
+    $('#portraitFilterNote').hidden=!$('#portraitQuery').value.trim()&&!choices.source&&choices.includeWithoutPortrait;
     $('#morePortraits').hidden=total<=portraitLimit;
+    $('#morePortraits').textContent=`Show more people (${Math.max(0,total-portraitLimit).toLocaleString()} ${total>unique?'group entries':'people'} remaining)`;
   }
   function renderSourceLists(){
     const all=[...documents,...(window.ArchiveItems?.pendingReports(documents)||[])];
@@ -256,7 +270,8 @@
   $('#copyArchiveLink').addEventListener('click',()=>{writeRoute();copyLink(href({person:''}));});
   $('#closeProfileDetails').addEventListener('click',()=>{$('#profileDetails').hidden=true;route.person='';writeRoute(true);});
   $('#showLiving').addEventListener('change',toggleLiving);
-  ['portraitSort','portraitSource','portraitQuery'].forEach(id=>$('#'+id).addEventListener(id==='portraitQuery'?'input':'change',()=>{portraitLimit=24;renderGallery();}));
+  ['portraitSort','portraitSource','portraitVisibility','portraitQuery'].forEach(id=>$('#'+id).addEventListener(id==='portraitQuery'?'input':'change',()=>{portraitLimit=24;renderGallery();}));
+  $('#clearPortraitFilters').addEventListener('click',()=>{$('#portraitQuery').value='';$('#portraitSource').value='';$('#portraitVisibility').value='all';portraitLimit=24;renderGallery();});
   $('#morePortraits').addEventListener('click',()=>{portraitLimit+=24;renderGallery();});
   $('#closeSourceViewer').addEventListener('click',()=>closeSource());
   $('#sourcePageGo').addEventListener('click',()=>openSource(route.document,$('#sourcePage').value));
@@ -298,7 +313,7 @@
       if(data.validation)$('#archiveValidation').textContent=`Rebuilt from ${documents.length} reports · ${new Set((treeData?.edges||[]).map(e=>e.parentId+'|'+e.childId)).size.toLocaleString()} unique family links · ${(treeData?.edges||[]).length.toLocaleString()} report-cited links · ${data.validation.reviewItems||0} extraction items awaiting review · ${data.validation.identityReviewCount||0} profiles need same-name review. Report claims are not independent verification.`;
       loadError='';
     } catch(error) {
-      index=null;profiles=[];rawProfiles=[];documents=[];sourceArchive={};treeData=null;privateDetails={};privateReady=false;$('#reportLibrary').innerHTML='';$('#archiveValidation').hidden=true;$('#showLiving').disabled=true;$('#portraitSummary').textContent='Connect the private archive to see source portraits.';
+      index=null;profiles=[];rawProfiles=[];documents=[];sourceArchive={};treeData=null;privateDetails={};privateReady=false;$('#reportLibrary').innerHTML='';$('#archiveValidation').hidden=true;$('#showLiving').disabled=true;$('#portraitSummary').textContent='Connect the private archive to see people and portraits.';$('#portraitGallery').innerHTML='';$('#morePortraits').hidden=true;
       loadError=error.message==='signin'?'Sign in again to load the current saved archive.':error.message==='missing'?'The public code does not include family data. The full archive is available only in the private Sites preview.':'The archive could not be loaded. Check your connection, then try again.';
       ['profileMetric','placeMetric','reportMetric','restrictedMetric'].forEach(id=>$('#'+id).textContent='—');
     } finally {
