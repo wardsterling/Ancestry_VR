@@ -5,7 +5,7 @@ function setup(automatic=false){
   class Element{
     constructor(id,tag){Object.assign(this,{id,tag,handlers:{},value:'',innerHTML:'',textContent:'',hidden:false,disabled:false,checked:true,style:{},classList:{toggle(){}}});nodes.set(id,this);}
     addEventListener(type,fn){(this.handlers[type]||=[]).push(fn);}
-    async emit(type,extra={}){for(const fn of this.handlers[type]||[])await fn({target:this,preventDefault(){},...extra});}
+    async emit(type,extra={}){const e={target:this,detail:1,preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra};for(const fn of this.handlers[type]||[]){await fn(e);if(e.stopped)break;}return e;}
     querySelectorAll(){return [...nodes.values()].filter(n=>/^(reference|wallReference)/.test(n.id)&&['button','input','select'].includes(n.tag));}
     setAttribute(){} removeAttribute(name){delete this[name];} showModal(){this.open=true;} close(){this.open=false;}
     scrollIntoView(){} getBoundingClientRect(){return {left:0,top:0,width:1000,height:500};} setPointerCapture(){}
@@ -14,7 +14,7 @@ function setup(automatic=false){
   const context2d={fillRect(){},drawImage(){},translate(){},rotate(){}};
   const document={getElementById:id=>nodes.get(id),addEventListener(type,fn){(handlers[type]||=[]).push(fn);},createElement(tag){assert.equal(tag,'canvas');return {width:0,height:0,getContext:()=>context2d,toBlob:fn=>fn(new Blob(['synthetic JPEG'],{type:'image/jpeg'})),toDataURL:()=> 'data:image/jpeg;base64,c3ludGhldGlj'};}};
   class Image{constructor(){this.width=8000;this.height=2000;}set src(value){this.url=value;queueMicrotask(()=>this.onload());}}
-  const window={WallReferenceRules:require('../wall-reference-rules'),confirm:()=>true,addEventListener(){},ArchiveApp:{profiles:[],showLiving:false},PhotoWorkspace:{photos:[{id:'wall1',kind:'wall',title:'Picture one',rect:[0,0,5,10]},{id:'wall2',kind:'wall',title:'Picture two',rect:[10,0,5,10]}],selected:{id:'wall1'}},WallMatches:{changed(){changed++;}},PhotoMatcher:{async analyze(){return {faceAvailable:true,faces:[[.1,.2]],faceBoxes:[[10,20,30,40]]};},async preview(){return 'data:image/jpeg;base64,c3ludGhldGlj';}}};
+  const window={ImagePan:require('../image-pan'),WallReferenceRules:require('../wall-reference-rules'),confirm:()=>true,addEventListener(){},ArchiveApp:{profiles:[],showLiving:false},PhotoWorkspace:{photos:[{id:'wall1',kind:'wall',title:'Picture one',rect:[0,0,5,10]},{id:'wall2',kind:'wall',title:'Picture two',rect:[10,0,5,10]}],selected:{id:'wall1'}},WallMatches:{changed(){changed++;}},PhotoMatcher:{async analyze(){return {faceAvailable:true,faces:[[.1,.2]],faceBoxes:[[10,20,30,40]]};},async preview(){return 'data:image/jpeg;base64,c3ludGhldGlj';}}};
   const alignmentCalls=[];if(automatic)window.WallAlignment={async process(records){alignmentCalls.push(...records.map(r=>r.id));return records.map(r=>{const aligned={...r,revision:r.revision+1,alignment:{engine:'wall-align-1',status:'aligned'},regions:[{id:'auto-link',photoId:'wall1',crop:[10,10,20,20],enabled:true,origin:'automatic'}]};saved.set(r.id,aligned);return aligned;});}};
   const fetch=async(url,options={})=>{
     const method=options.method||'GET';requests.push({url,method});
@@ -62,4 +62,12 @@ test('a previously failed alignment exposes review and rotation preserves its ed
  const record={id:'failed',label:'Existing wall',width:8000,height:2000,revision:1,url:'/api/wall-references/failed/image',rotation:0,enabled:true,regions:[],alignment:{engine:'wall-align-1',status:'review',inliers:3,reason:'The alignment has too many conflicting points.',points:[{id:'a',from:[10,20],to:[30,40],enabled:false,conflict:true}]}};app.saved.set(record.id,record);
  await app.window.WallReferences.open();assert.match(app.nodes.get('referenceList').innerHTML,/Resolve alignment/);await app.click('reference-resolve',record.id);assert.equal(opened.length,1);assert.equal(opened[0][0].id,'failed');assert.match(opened[0][2],/^data:image/);
  await app.nodes.get('referenceRotate').emit('click');await app.nodes.get('referenceSave').emit('click');const saved=app.saved.get(record.id);assert.deepEqual(Array.from(saved.alignment.points[0].to),[60,30]);assert.deepEqual(Array.from(saved.alignment.points[0].from),[10,20]);assert.equal(saved.alignment.points[0].enabled,false);
+});
+
+test('two-finger navigation cancels an unfinished crop without saving a stray link',async()=>{
+ const app=setup();await app.window.WallReferences.open();const input=app.nodes.get('referenceFiles');input.files=[new File(['one'],'First.jpg')];await input.emit('change');
+ const n=id=>app.nodes.get(id),v=n('referenceImageViewport'),stage=n('referenceImageStage');Object.assign(v,{scrollLeft:0,scrollTop:0,scrollWidth:2000,scrollHeight:1000,clientWidth:500,clientHeight:250});
+ await v.emit('pointerdown',{pointerType:'touch',pointerId:1,clientX:200,clientY:200});await stage.emit('pointerdown',{pointerType:'touch',pointerId:1,clientX:200,clientY:200});
+ assert.equal((await v.emit('pointerdown',{pointerType:'touch',pointerId:2,clientX:300,clientY:200})).stopped,true);await v.emit('pointermove',{pointerType:'touch',pointerId:1,clientX:100,clientY:100});await v.emit('pointermove',{pointerType:'touch',pointerId:2,clientX:200,clientY:100});assert.equal(v.scrollLeft,100);assert.equal(v.scrollTop,100);assert.equal((await v.emit('pointerup',{pointerType:'touch',pointerId:1})).stopped,true);assert.equal((await v.emit('pointerup',{pointerType:'touch',pointerId:2})).stopped,true);
+ await n('referenceSave').emit('click');assert.equal([...app.saved.values()][0].regions.length,0);assert.equal(n('referenceCropBox').hidden,true);
 });

@@ -4,6 +4,8 @@
   const $=id=>document.getElementById(id),dialog=$('alignmentReviewDialog');
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let record,photos=[],points=[],result=null,history=[],selected=null,placing=null,first=null,busy=false,dirty=false,step=1,issue='';
+  const pans=['From','To'].map(side=>window.ImagePan?.attach($('alignment'+side+'Viewport'),{enabled:()=>!!record&&!busy}));
+  const resetPans=()=>pans.forEach(p=>p?.reset());
   const status=text=>$('alignmentReviewStatus').textContent=text;
   const active=()=>points.filter(p=>p.enabled),conflicts=()=>points.filter(p=>p.enabled&&p.conflict);
   const chosen=()=>points.find(p=>p.id===selected);
@@ -61,9 +63,9 @@
     for(const [side,field] of [['From','from'],['To','to']]){const viewport=$('alignment'+side+'Viewport'),stage=$('alignment'+side+'Stage'),box=stage.getBoundingClientRect();viewport.scrollTo?.({left:Math.max(0,box.width*p[field][0]/100-viewport.clientWidth/2),top:Math.max(0,box.height*p[field][1]/100-viewport.clientHeight/2),behavior:'smooth'});}
   }
   function showReview(){if(busy)return;step=2;if(!chosen())chooseFirst();render();centerSelected();}
-  function close(){if(busy||dirty&&!window.confirm('Close without saving the alignment edits?'))return;dialog.close();record=null;result=null;first=null;$('alignmentReferenceImage').removeAttribute('src');}
+  function close(){if(busy||dirty&&!window.confirm('Close without saving the alignment edits?'))return;resetPans();dialog.close();record=null;result=null;first=null;$('alignmentReferenceImage').removeAttribute('src');}
   async function open(value,wall,preview){
-    if(busy)return;record=structuredClone(value);photos=wall;points=structuredClone(record.alignment?.points||[]);history=[];result=null;placing=null;first=null;dirty=false;step=1;issue=record.alignment?.reason||'';chooseFirst();
+    if(busy)return;resetPans();record=structuredClone(value);photos=wall;points=structuredClone(record.alignment?.points||[]);history=[];result=null;placing=null;first=null;dirty=false;step=1;issue=record.alignment?.reason||'';chooseFirst();
     $('alignmentReviewTitle').textContent='Align this photo · '+record.label;$('alignmentReferenceImage').src=preview;
     for(const side of ['From','To']){$('alignment'+side+'Zoom').value='100';$('alignment'+side+'Stage').style.width='100%';}
     $('alignmentShowAll').checked=false;dialog.showModal();render();lock(false);status('Start with Try suggested repair. It checks the remaining points before you save anything.');
@@ -94,7 +96,7 @@
   async function quickRepair(){if(busy)return;if(conflicts().length){change();points=points.map(p=>p.conflict?{...p,enabled:false}:p);}step=2;chooseFirst();render();await check();}
   async function save(apply){
     if(busy||apply&&result?.status!=='aligned')return;if(placing){status('Finish or cancel the current point pair before saving.');return;}
-    lock(true);status('Saving your progress…');try{const saved=apply?await window.WallAlignment.saveReviewed(record,{...result,points}):await window.WallAlignment.saveReviewDraft(record,points);record=structuredClone(saved);dirty=false;window.WallMatches?.changed();status(apply?'Saved. The clearer crops are ready for source-picture matching.':'Progress saved. Close whenever you like; your point choices will be here next time.');if(apply){dialog.close();record=null;}}catch(error){status(error.message+' Your point edits are still here; retry saving.');}finally{lock(false);}
+    lock(true);status('Saving your progress…');try{const saved=apply?await window.WallAlignment.saveReviewed(record,{...result,points}):await window.WallAlignment.saveReviewDraft(record,points);record=structuredClone(saved);dirty=false;window.WallMatches?.changed();status(apply?'Saved. The clearer crops are ready for source-picture matching.':'Progress saved. Close whenever you like; your point choices will be here next time.');if(apply){resetPans();dialog.close();record=null;}}catch(error){status(error.message+' Your point edits are still here; retry saving.');}finally{lock(false);}
   }
   function nextPoint(direction=1){if(busy||placing)return;const ordered=[...conflicts(),...points.filter(p=>!p.enabled||!p.conflict)],index=ordered.findIndex(p=>p.id===selected);selected=ordered[(index+direction+ordered.length)%ordered.length]?.id||null;showReview();}
   function skipSelected(){const p=chosen();if(busy||placing||!p?.enabled)return;change();p.enabled=false;chooseFirst();render();centerSelected();status(active().length<4?'Pair skipped. Add more matching corners to reach four.':'Pair skipped. Review the next point, or Check alignment.');}
@@ -111,7 +113,7 @@
   for(const side of ['From','To'])$('alignment'+side+'Zoom').addEventListener('input',()=>{$('alignment'+side+'Stage').style.width=$('alignment'+side+'Zoom').value+'%';centerSelected();});
   $('alignmentAddCoordinates').addEventListener('click',()=>{if(busy)return;try{if(['alignmentFromX','alignmentFromY','alignmentToX','alignmentToY'].some(id=>!$(id).value.trim()))throw Error('Enter all four coordinates.');addPair(['alignmentFromX','alignmentFromY'].map(id=>Number($(id).value)),['alignmentToX','alignmentToY'].map(id=>Number($(id).value)));}catch(error){status(error.message);}});
   $('alignmentCheck').addEventListener('click',check);$('alignmentApply').addEventListener('click',()=>save(true));$('alignmentSavePoints').addEventListener('click',()=>save(false));
-  $('alignmentManualLink').addEventListener('click',()=>{if(busy||dirty&&!window.confirm('Continue to individual picture linking without saving these points?'))return;dialog.close();record=null;$('referenceTarget').focus();$('referenceEditor').scrollIntoView?.({block:'start',behavior:'smooth'});});
+  $('alignmentManualLink').addEventListener('click',()=>{if(busy||dirty&&!window.confirm('Continue to individual picture linking without saving these points?'))return;resetPans();dialog.close();record=null;$('referenceTarget').focus();$('referenceEditor').scrollIntoView?.({block:'start',behavior:'smooth'});});
   document.addEventListener('click',event=>{
     for(const action of ['view','replace','toggle','remove']){const button=event.target.closest('[data-alignment-'+action+']');if(!button||busy||placing||!record)continue;const id=button.dataset['alignment'+action[0].toUpperCase()+action.slice(1)],p=points.find(p=>p.id===id);if(!p)return;if(action==='replace')return begin(id);selected=id;step=2;
       if(action==='toggle'){change();p.enabled=!p.enabled;}if(action==='remove'){change();points=points.filter(p=>p.id!==id);chooseFirst();}render();centerSelected();if(action!=='view')status('Point edits are ready. Check alignment before saving picture links.');return;
