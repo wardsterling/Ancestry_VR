@@ -19,7 +19,7 @@
     return list;
   }
   function visibleMatches(result){return (result?.matches||[]).map(m=>{const source=sources.get(m.id);return source&&source.source.reportId===m.source.reportId&&source.source.page===m.source.page?{...source,...m,label:m.personId?source.label:'Source photograph — review people on this page'}:null;}).filter(Boolean);}
-  function forPhoto(id){const result=results.get(id);return result&&fresh.has(id)&&allowed(workspace()?.photos.find(p=>p.id===id)||{})?{...result,matches:visibleMatches(result)}:null;}
+  function forPhoto(id){const result=results.get(id),photo=workspace()?.photos.find(p=>p.id===id);if(!result||!fresh.has(id)||!allowed(photo||{}))return null;const rejected=new Set(photo?.rejectedSuggestions||[]),all=visibleMatches(result);return {...result,matches:all.filter(m=>!rejected.has(m.suggestionKey)),rejected:[...sources.values()].filter(m=>rejected.has(m.suggestionKey))};}
   function render(){
     $('wallAutoMatch').checked=enabled;
     $('wallReferenceSummary').textContent=referenceSummary;
@@ -36,7 +36,7 @@
     const key=app().snapshotId+'|'+scope(),token=++epoch;running=true;lastError='';progress='Loading saved photo matches…';render();
     const active=()=>token===epoch&&key===app()?.snapshotId+'|'+scope();
     try{
-      const list=candidates();sources=new Map(list.map(c=>[c.id,c]));
+      const list=candidates();for(const c of list)c.suggestionKey=await hash(['source-photo',c.source,c.url,c.crop]);if(!active())return;sources=new Map(list.map(c=>[c.id,c]));
       if(!list.length)throw Error('No source photographs are available in this privacy view. Load the archive or enable living-person details to include their portraits.');
       const [saved,closeups,references]=await Promise.all([json('/api/photo-matches?scope='+scope()),json('/api/photo-augments'),json('/api/wall-references')]);if(!active())return;
       results=new Map(saved.results.map(r=>[r.photoId,r]));fresh.clear();loaded=true;
@@ -60,7 +60,8 @@
         if(!active())return;progress=`Checking ${job.photo.title} · ${fresh.size+1} of ${fresh.size+jobs.length-jobs.indexOf(job)} pictures. Suggestions save as each picture finishes.`;render();
         const queries=[];for(const query of job.queries){if(!active())return;queries.push(await window.PhotoMatcher.analyze(query,true));}
         if(!active())return;
-        const compared=analyzed.filter(c=>c.id!=='photo:'+job.photo.id);
+        const dismissed=new Set(workspace().photos.find(p=>p.id===job.photo.id)?.rejectedSuggestions||[]);
+        const compared=analyzed.filter(c=>c.id!=='photo:'+job.photo.id&&!dismissed.has(c.suggestionKey));
         const result={photoId:job.photo.id,scope:scope(),engine:window.PhotoMatchRules.VERSION,fingerprint:job.fingerprint,snapshotId:app().snapshotId,matches:window.PhotoMatcher.rank(queries,compared),compared:compared.length,unavailable,faces:queries.reduce((n,q)=>n+q.faces.length,0),faceAvailable:queries.every(q=>q.faceAvailable)&&compared.every(c=>c.features.faceAvailable)};
         const saved=await json('/api/photo-matches',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(result)});if(!active())return;
         results.set(job.photo.id,saved.result);fresh.add(job.photo.id);render();await pause();
@@ -80,6 +81,6 @@
   $('wallMatchRetry').addEventListener('click',()=>{enabled=true;forceScan=true;refresh(true);});
   document.addEventListener('click',e=>{const button=e.target.closest('[data-open-wall-match]');if(button){workspace().selectPhoto(button.dataset.openWallMatch);window.WallIdentification?.showMatches();}});
   window.addEventListener('hashchange',schedule);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){epoch++;progress='Paused while this page is in the background.';}else schedule();});
-  window.WallMatches={refresh,forPhoto,changed(){refresh(true);},request(id){requested.add(id);enabled=true;forceScan=true;refresh(true);},get running(){return running;}};
+  window.WallMatches={refresh,forPhoto,reviewChanged:render,changed(){refresh(true);},request(id){requested.add(id);enabled=true;forceScan=true;refresh(true);},get running(){return running;}};
   refresh();
 })();

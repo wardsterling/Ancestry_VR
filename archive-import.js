@@ -1,9 +1,9 @@
 /* Saved PDFs enter the archive through the same parser and validation as originals. */
 (() => {
   'use strict';
-  let running=false,ready=false,state=null;const attempted=new Set(),messages=new Map();
+  let running=false,ready=false,state=null;const attempted=new Set(),messages=new Map(),drafts=new Map();
   const app=()=>window.ArchiveApp,items=()=>window.ArchiveItems?.all()||[];
-  const json=async (url,options={})=>{const response=await fetch(url,{cache:'no-store',...options});let data;try{data=await response.json();}catch{throw Error('Open the private Site to process source reports.');}if(!response.ok)throw Error(data.error||'The archive could not be reached.');return data;};
+  const json=async (url,options={})=>{const response=await fetch(url,{cache:'no-store',...options});let data;try{data=await response.json();}catch{throw Error('Open the private Site to process source reports.');}if(!response.ok)throw Object.assign(Error(data.error||'The archive could not be reached.'),{status:response.status,code:data.code,links:data.links});return data;};
   const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
   const progress=(id,text,error=false)=>{messages.set(id,{text,error});window.ArchiveItems?.archiveChanged();};
   async function parse(payload){
@@ -25,25 +25,32 @@
     const inputs={...base.inputs,...(extra.inputs||{}),[added.id]:{text:extracted.text}};
     progress(item.id,'Building families, checking duplicates and matching printed portraits…');
     const result=await parse({archive,tree,privateDetails,sourcePeople,inputs,checks:base.checks,added,geometry:extracted.geometry});
-    progress(item.id,'Saving validated people, pictures and source links…');
-    await json('/api/archive-imports/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...result,baseSnapshot:state.baseSnapshot,baseRevision:state.revision})});
-    state=await json('/api/archive-imports');await app().reload();
-    progress(item.id,`${result.imported.people} people · ${result.imported.pictures} pictures incorporated`);
+    const job={item,result,previous:{archive,tree,privateDetails,sourcePeople},baseSnapshot:state.baseSnapshot,baseRevision:state.revision,choices:{}};
+    if(window.ArchiveLinkRecovery.issues(result,job.previous).length){hold(job);return;}
+    try{await commit(job);}catch(error){if(error.code==='PERSON_LINK_REVIEW_REQUIRED'){hold(job);return;}throw error;}
   }
+  function hold(job){drafts.set(job.item.id,job);messages.set(job.item.id,{text:'Your PDF is saved. Repair the person links to finish adding its records.',error:true,repair:true});window.ArchiveItems?.archiveChanged();}
+  async function commit(job){
+    progress(job.item.id,'Saving validated people, pictures and source links…');
+    await json('/api/archive-imports/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...job.result,baseSnapshot:job.baseSnapshot,baseRevision:job.baseRevision})});
+    drafts.delete(job.item.id);state=await json('/api/archive-imports');await app().reload();
+    progress(job.item.id,`${job.result.imported.people} people · ${job.result.imported.pictures} pictures incorporated`);
+  }
+
   async function queue(){
-    if(running||!app()?.ready||!window.ArchiveItems?.loaded)return;
+    if(running||drafts.size||!app()?.ready||!window.ArchiveItems?.loaded)return;
     running=true;
     try{
       if(!ready){state=await json('/api/archive-imports');ready=true;}
       for(const item of items()){
         if(item.file?.type!=='application/pdf'||attempted.has(item.id)||app().documents.some(d=>(d.importItemId===item.id||item.contentHash&&d.sha256===item.contentHash))||state.imports.some(i=>i.itemId===item.id))continue;
-        attempted.add(item.id);try{await processItem(item);}catch(error){progress(item.id,error.message,true);}
+        attempted.add(item.id);try{await processItem(item);}catch(error){progress(item.id,error.message,true);}if(drafts.size)break;
       }
     }catch(error){for(const item of items().filter(i=>i.file?.type==='application/pdf'))progress(item.id,error.message,true);}
     finally{running=false;}
   }
-  window.ArchiveImport={queue,status(id){const imported=state?.imports.find(i=>i.itemId===id);return messages.get(id)||(imported?{text:`${imported.people} people · ${imported.pictures} pictures incorporated`}:null);},retry(id){if(running)return;attempted.delete(id);ready=false;messages.delete(id);queue();}};
+  window.ArchiveImport={queue,status(id){const imported=state?.imports.find(i=>i.itemId===id);return messages.get(id)||(imported?{text:`${imported.people} people · ${imported.pictures} pictures incorporated`}:null);},review(id){window.ArchiveImportReview.open(drafts.get(id));},async saveReview(id,choices){const job=drafts.get(id);if(!job||running)throw Error('Wait for the current report to finish, then try again.');running=true;try{job.result=await window.ArchiveLinkRecovery.stamp(window.ArchiveLinkRecovery.repair(job.result,job.previous,choices));await commit(job);}catch(error){if(error.status===409){drafts.delete(id);progress(id,'The archive changed. Close this review and retry incorporation to use the latest records.',true);}else hold(job);throw error;}finally{running=false;if(!drafts.size)queue();}},retry(id){if(running)return;if(drafts.has(id)){this.review(id);return;}attempted.delete(id);ready=false;messages.delete(id);queue();}};
   document.addEventListener('click',event=>{const button=event.target.closest('[data-retry-import]');if(button){event.preventDefault();window.ArchiveImport.retry(button.dataset.retryImport);}});
-  window.addEventListener('beforeunload',event=>{if(running){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if(running||drafts.size){event.preventDefault();event.returnValue='';}});
   queue();
 })();

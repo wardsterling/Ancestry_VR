@@ -632,7 +632,7 @@ class Extractor:
         retained=0
         for old in previous.get('profiles',[]):
             candidates={ids[c] for c in clusters_for_prior.get(old['id'],set())}
-            if not candidates:
+            if not candidates and old.get('reviewStatus') != 'import-link-review':
                 for n in [old['name']]+old.get('aliases',[]):
                     candidates.update(ids[c] for c in key_clusters.get(name_key(n),set()))
             if candidates:
@@ -640,7 +640,7 @@ class Extractor:
                     aliases[old['id']]=dict(name=old['name'],targets=sorted(candidates))
             else:
                 # Keep old URLs/identities visible, but quarantine unvalidated facts.
-                p={**old,'extractionVersion':2,'facts':[],'places':[],'years':[],'birthYear':None,'deathYear':None,'birthDate':None,'deathDate':None,'birthPlace':None,'deathPlace':None,'reviewStatus':'unmatched-legacy','recordType':'legacy profile awaiting source match'}
+                p={**old,'extractionVersion':2,'facts':[],'places':[],'years':[],'birthYear':None,'deathYear':None,'birthDate':None,'deathDate':None,'birthPlace':None,'deathPlace':None,'reviewStatus':old.get('reviewStatus') or 'unmatched-legacy','recordType':'legacy profile awaiting source match'}
                 profiles.append(p)
                 retained+=1
         for old_id,alias in previous.get('idAliases',{}).items():

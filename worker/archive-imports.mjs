@@ -73,7 +73,7 @@ export async function handleArchiveImports(request,env,base){
     if(value.baseRevision!==(current?.revision||0))throw importError('Another report was incorporated in another window. Reload and retry this saved item.',409);
     const rows=(await env.DB.prepare('SELECT id, body, content_hash FROM archive_items WHERE owner_id = ?').bind(owner).all()).results;
     const items=rows.map(row=>({...JSON.parse(row.body),content_hash:row.content_hash}));
-    let catalog;try{catalog=globalThis.ArchiveImportRules.validate(value,current?.catalog||base,items);}catch(error){throw importError(error.message);}
+    let catalog;try{catalog=globalThis.ArchiveImportRules.validate(value,current?.catalog||base,items);}catch(error){throw Object.assign(importError(error.message),{code:error.code,links:error.links});}
     // Verify every newly referenced derivative exists before switching the snapshot.
     const added=value.archive.documents.find(d=>d.id===value.imported.reportId),urls=new Set(added.pageAssets.flatMap(p=>[p.image,p.text]));
     for(const p of value.archive.profiles){if(p.portrait?.src?.startsWith(`/api/archive-imports/${added.importItemId}/`))urls.add(p.portrait.src);}
@@ -86,5 +86,5 @@ export async function handleArchiveImports(request,env,base){
       ON CONFLICT(owner_id) DO UPDATE SET body = excluded.body, revision = archive_state.revision + 1, updated_at = excluded.updated_at WHERE archive_state.revision = ? RETURNING revision`).bind(owner,body,now,value.baseRevision).all();
     if(!result.results.length)throw importError('The archive changed while this report was saving. Reload and retry.',409);
     return importJson({saved:true,revision:result.results[0].revision,imported:value.imported});
-  }catch(error){if(error.status)return importJson({error:error.message},error.status);console.error('Archive import failed',error.message);return importJson({error:'The report could not finish saving. The original and the previous archive are safe; retry this item.'},503);}
+  }catch(error){if(error.status)return importJson({error:error.message,...(error.code?{code:error.code,links:error.links}:{} )},error.status);console.error('Archive import failed',error.message);return importJson({error:'The report could not finish saving. The original and the previous archive are safe; retry this item.'},503);}
 }

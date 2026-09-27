@@ -4,7 +4,7 @@
   const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const app=()=>window.ArchiveApp,workspace=()=>window.PhotoWorkspace,rules=window.PhotoAugmentRules;
   let photo=null,hidden=false,personId='',pageFilter=null,augments=[],augmentState='idle',editor=null,editorImage=null,editorFile=null,objectUrl=null,editingDirty=false,busy=false,searchToken=0,loadToken=0,captureToken=0;
-  let matches=[],lastSnapshot='',lastLiving=false,lastMatchMarkup='';
+  let matches=[],rejectedMatches=[],lastSnapshot='',lastLiving=false,lastMatchMarkup='';
   const status=(id,text)=>$(id).textContent=text;
   const validSelection=()=>photo&&workspace()?.selected?.id===photo.id&&!hidden;
   async function json(url,options={}){const r=await fetch(url,{cache:'no-store',...options});let data;try{data=await r.json();}catch{throw Error('Open the private Site and sign in to save close-ups.');}if(!r.ok)throw Error(data.error||'Please try again.');return data;}
@@ -71,15 +71,22 @@
     window.WallMatches?.changed();if(matchAfterSave&&photo?.id===photoId&&validSelection()){switchMode('photo');matchesChanged();}
   }
   async function removeAugment(id){if(!validSelection()||busy)return;const a=augments.find(a=>a.id===id);if(!a||!window.confirm('Remove this working close-up? The original wall picture and its connections will stay.'))return;const photoId=photo.id;setBusy(true);try{await json('/api/photo-augments/'+id,{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({revision:a.revision})});if(photo?.id!==photoId)return;augments=augments.filter(a=>a.id!==id);if(editor?.id===id)clearEditor();renderAugments();invalidateMatches();status('augmentStatus','Close-up removed.');window.WallMatches?.changed();}catch(e){status('augmentStatus',e.message);}finally{setBusy(false);}}
-  function invalidateMatches(){searchToken++;matches=[];lastMatchMarkup='';$('photoMatchResults').innerHTML='';$('cancelPhotoMatches').hidden=true;$('findPhotoMatches').disabled=hidden;status('photoMatchStatus','');}
+  function invalidateMatches(){searchToken++;matches=[];rejectedMatches=[];lastMatchMarkup='';$('photoMatchResults').innerHTML='';$('cancelPhotoMatches').hidden=true;$('findPhotoMatches').disabled=hidden;status('photoMatchStatus','');}
   function matchesChanged(){
     if(!validSelection())return;
-    const result=window.WallMatches?.forPhoto(photo.id);matches=result?.matches||[];
+    const result=window.WallMatches?.forPhoto(photo.id);matches=result?.matches||[];rejectedMatches=result?.rejected||[];
     if(!app()?.ready){status('photoMatchStatus','Waiting for the source archive. Reconnect above if it cannot load.');$('photoMatchResults').innerHTML='';return;}
     if(!result){const linked=!window.PhotoResearch.awaitingIdentification(photo,{profileIds:app().profiles.map(p=>p.id)});status('photoMatchStatus',linked?'This picture has a saved source connection. Review it below, or check for additional matches.':photo.kind==='report'?'Choose Check for matches to compare this source photograph.':'This picture is queued for automatic comparison. Suggestions will appear here when ready.');$('photoMatchResults').innerHTML='';lastMatchMarkup='';return;}
-    status('photoMatchStatus',`${matches.length} saved suggestions · ${result.compared} source photographs checked${result.unavailable?' · '+result.unavailable+' unavailable':''}.`);
-    const markup=matches.map((m,i)=>`<article class="photo-match"><div class="match-picture"><svg viewBox="${m.crop[0]} ${m.crop[1]} ${m.crop[2]} ${m.crop[3]}" role="img" aria-label="Suggested source photograph"><image href="${esc(m.url)}" width="100" height="100" preserveAspectRatio="none"/></svg></div><small>${m.kind==='face'?'Possible face resemblance':'Similar photograph'}</small><strong>${esc(m.label)}</strong><small>${esc(app().documents.find(d=>d.id===m.source.reportId)?.title)} · p. ${m.source.page}</small><a href="#archive?document=${esc(m.source.reportId)}&page=${m.source.page}" data-source-id="${esc(m.source.reportId)}" data-source-page="${m.source.page}">Read original source page</a><button class="primary" data-review-match="${i}">${m.personId?'Review person & source':'See people on this page'}</button></article>`).join('')||'<p>No close matches found.'+(!result.faceAvailable?' Face comparison was unavailable. Use Check wall again to retry.':!result.faces?' No clear face could be detected in this wall crop. Add a sharper close-up to improve recognition.':' Try a sharper close-up or search by name.')+'</p>';
+    status('photoMatchStatus',`${matches.length} suggestions${rejectedMatches.length?` · ${rejectedMatches.length} rejected`:""} · ${result.compared} source photographs checked${result.unavailable?' · '+result.unavailable+' unavailable':''}.`);
+    let markup=matches.map((m,i)=>`<article class="photo-match"><div class="match-picture"><svg viewBox="${m.crop[0]} ${m.crop[1]} ${m.crop[2]} ${m.crop[3]}" role="img" aria-label="Suggested source photograph"><image href="${esc(m.url)}" width="100" height="100" preserveAspectRatio="none"/></svg></div><small>${m.kind==='face'?'Possible face resemblance':'Similar photograph'}</small><strong>${esc(m.label)}</strong><small>${esc(app().documents.find(d=>d.id===m.source.reportId)?.title)} · p. ${m.source.page}</small><a href="#archive?document=${esc(m.source.reportId)}&page=${m.source.page}" data-source-id="${esc(m.source.reportId)}" data-source-page="${m.source.page}">Read original source page</a><button class="primary" data-review-match="${i}">${m.personId?'Review person & source':'See people on this page'}</button><button class="secondary" data-reject-match="${i}">Reject suggestion</button></article>`).join('')||'<p>No close matches found.'+(!result.faceAvailable?' Face comparison was unavailable. Use Check wall again to retry.':!result.faces?' No clear face could be detected in this wall crop. Add a sharper close-up to improve recognition.':' Try a sharper close-up or search by name.')+'</p>';
+    if(rejectedMatches.length)markup+=`<details class="rejected-matches"><summary>Rejected suggestions (${rejectedMatches.length})</summary>${rejectedMatches.map((m,i)=>`<article class="photo-match"><strong>${esc(m.label)}</strong><small>${esc(app().documents.find(d=>d.id===m.source.reportId)?.title)} · p. ${m.source.page}</small><button class="secondary" data-undo-match="${i}">Undo rejection</button></article>`).join('')}</details>`;
     if(markup!==lastMatchMarkup){$('photoMatchResults').innerHTML=markup;lastMatchMarkup=markup;}
+  }
+  async function rejectMatch(index,undo=false){
+    if(!validSelection()||busy)return;const m=(undo?rejectedMatches:matches)[index];if(!m?.suggestionKey)return;
+    const photoId=photo.id;setBusy(true);status('photoMatchStatus',undo?'Restoring suggestion…':'Saving rejection…');
+    try{if(!await workspace().rejectSuggestion(m.suggestionKey,!undo))throw Error('This change could not be saved. Please retry.');if(photo?.id!==photoId)return;matchesChanged();status('photoMatchStatus',undo?'Suggestion restored.':'Suggestion rejected and saved. You can undo it under Rejected suggestions.');}
+    catch(error){if(photo?.id===photoId)status('photoMatchStatus',error.message);}finally{setBusy(false);}
   }
   function findMatches(){if(!validSelection()||busy)return;switchMode('photo');window.WallMatches?.request(photo.id);matchesChanged();}
   function photoChanged(p,restricted){
@@ -110,6 +117,8 @@
     if(e.target.closest('[data-reload-augments]')){loadAugments();return;}
     const edit=e.target.closest('[data-edit-augment]');if(edit){editAugment(edit.dataset.editAugment);return;}
     const remove=e.target.closest('[data-remove-augment]');if(remove){removeAugment(remove.dataset.removeAugment);return;}
+    const reject=e.target.closest('[data-reject-match]');if(reject){rejectMatch(Number(reject.dataset.rejectMatch));return;}
+    const undo=e.target.closest('[data-undo-match]');if(undo){rejectMatch(Number(undo.dataset.undoMatch),true);return;}
     const match=e.target.closest('[data-review-match]');if(match){const m=matches[Number(match.dataset.reviewMatch)];if(!m)return;if(m.personId)choosePerson(m.personId,m.source);else{pageFilter=m.source;$('identifyReport').value=m.source.reportId;$('identifySearch').value='';switchMode('name');renderNames();}}
   });
   window.addEventListener('beforeunload',e=>{if(editingDirty){e.preventDefault();e.returnValue='';}});

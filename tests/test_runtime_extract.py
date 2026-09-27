@@ -40,3 +40,19 @@ class RuntimeExtractTests(unittest.TestCase):
         result=rebuild(self.payload(TEXT.replace('2 i. Casey Example', '2 i. Robin Example')))
         self.assertIn('page 1: numbered reference has a different name',result['error'])
         self.assertNotIn('archive',result)
+    def test_split_identity_keeps_printed_name_links_and_source_specific_portrait(self):
+        payload=self.payload()
+        portrait={'src':'assets/synthetic.jpg','source':{'reportId':'old-report','page':2}}
+        payload['archive']={'documents':[{'id':'old-report','title':'Earlier report','sha256':'b'*64,'pages':2}],
+                            'profiles':[{'id':'old-person','name':'Casey Sample','portrait':portrait}],
+                            'idAliases':{'old-bookmark':{'name':'Casey Sample','targets':['old-person']}}}
+        payload['inputs']['old-report']={'text':'First Generation\n1. Casey Sample was born in 1800.\f2. Casey Sample was born in 1850.'}
+        mark={'rect':[10,10,20,5],'profileIds':['old-person']}
+        payload['sourcePeople']={'version':1,'sourceHashes':{'old-report':'b'*64},'pages':{'old-report':{'1':[mark],'2':[mark]}}}
+        result=rebuild(payload);self.assertNotIn('error',result)
+        people={p['birthYear']:p for p in result['archive']['profiles'] if p['name']=='Casey Sample'}
+        self.assertEqual(set(result['archive']['idAliases']['old-bookmark']['targets']),{p['id'] for p in people.values()})
+        for page,year in [(1,1800),(2,1850)]:
+            self.assertEqual(result['sourcePeople']['pages']['old-report'][str(page)][0]['profileIds'],[people[year]['id']])
+        self.assertNotIn('portrait',people[1800])
+        self.assertEqual(people[1850]['portrait'],portrait)

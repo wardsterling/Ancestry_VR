@@ -6,7 +6,7 @@ function setup(saved=[],options={}){
  const archive={ready:true,snapshotId:'snapshot',showLiving:false,documents:[{id:'report',pages:3}],profiles:[{id:'person1',name:'Synthetic Person',restricted:false,portrait:{src:'assets/report-portraits/synthetic.jpg',source:{reportId:'report',page:1}},sources:[{reportId:'report',page:1}]}]};
  const photo={id:'wall1',kind:'wall',title:'Synthetic wall picture',rect:[1,2,10,20],claims:[],evidence:[]};
  const workspace={ready:true,photos:[photo],selected:null,selectPhoto(){}};
- const window={ArchiveApp:archive,PhotoWorkspace:workspace,PhotoResearch:require('../photo-research'),PhotoMatchRules:rules,WallReferenceRules:require('../wall-reference-rules'),ProfilePresentation:{safePortrait:s=>s},SourceDocuments:{source:()=>null},WallIdentification:{matchesChanged(){}},PhotoMatcher:{clear(){},async analyze(record,query){analysis.push({record,query});return {photos:[],faces:[Array(128).fill(.1)],faceAvailable:true};},rank:()=>options.noMatch?[]:[{id:'person:person1',personId:'person1',kind:'face',source:{reportId:'report',page:1}}]},addEventListener(){}};
+ const window={ArchiveApp:archive,PhotoWorkspace:workspace,PhotoResearch:require('../photo-research'),PhotoMatchRules:rules,WallReferenceRules:require('../wall-reference-rules'),ProfilePresentation:{safePortrait:s=>s},SourceDocuments:{source:()=>null},WallIdentification:{matchesChanged(){}},PhotoMatcher:{clear(){},async analyze(record,query){analysis.push({record,query});return {photos:[],faces:[Array(128).fill(.1)],faceAvailable:true};},rank:(queries,candidates)=>options.noMatch?[]:candidates.map(c=>({id:c.id,personId:c.personId,kind:'face',source:c.source}))},addEventListener(){}};
  if(options.align)window.WallAlignment={async process(references){return references.map(r=>({...r,regions:[{id:'auto-link',photoId:'wall1',crop:[10,10,20,20],enabled:true,origin:'automatic'}]}));}};
  const document={visibilityState:'visible',getElementById:node,addEventListener(){}};
  let augments=[],references=[];
@@ -36,4 +36,12 @@ test('background references augment the original crop and their edits or exclusi
 
 test('opening the wall aligns old unlinked references before querying source matches',async()=>{
  const s=setup([],{align:true}),reference={id:'old-unlinked',url:'/api/wall-references/old-unlinked/image',label:'Earlier upload',width:4000,height:3000,rotation:0,revision:1,enabled:true,regions:[]};s.setReferences([reference]);await s.settle();assert(s.analysis.some(a=>a.query&&a.record.url===reference.url));assert.match(s.nodes.get('wallReferenceSummary').textContent,/1 enabled picture links/);
+});
+test('rejections survive reload, new scans and profile renames; undo restores matching',async()=>{
+ const first=setup();await first.settle();const key=first.window.WallMatches.forPhoto('wall1').matches[0].suggestionKey;assert.match(key,/^[a-f0-9]{64}$/);
+ const next=setup(first.writes);next.workspace.photos[0].rejectedSuggestions=[key];await next.settle();
+ assert.equal(next.window.WallMatches.forPhoto('wall1').matches.length,0);assert.equal(next.window.WallMatches.forPhoto('wall1').rejected.length,1);
+ next.archive.profiles[0].id='renamed-person';next.window.WallMatches.request('wall1');await next.settle();
+ assert.equal(next.writes.at(-1).matches.length,0);assert.equal(next.window.WallMatches.forPhoto('wall1').rejected[0].suggestionKey,key);
+ next.workspace.photos[0].rejectedSuggestions=[];next.window.WallMatches.request('wall1');await next.settle();assert.equal(next.window.WallMatches.forPhoto('wall1').matches[0].personId,'renamed-person');
 });

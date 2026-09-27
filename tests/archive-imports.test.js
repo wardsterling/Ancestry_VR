@@ -15,6 +15,62 @@ function environment(){
  return {sql,objects,DB:{prepare(query){return {bind(...params){return {async all(){return {results:sql.prepare(query).all(...params)}}}}}}},ARCHIVE_FILES:{async put(key,bytes){objects.set(key,new Uint8Array(bytes));},async get(key){return objects.has(key)?{body:objects.get(key)}:null;},async head(key){return objects.has(key)?{}:null;}}};
 }
 const request=(path='',method='GET',value,owner='owner',origin='https://example.test')=>new Request('https://example.test/api/archive-imports'+path,{method,headers:{...(owner?{'oai-authenticated-user-id':owner}:{}),origin,'content-type':'application/json'},...(value?{body:JSON.stringify(value)}:{})});
+function splitCandidate(){
+ const value=candidate(),person=value.archive.profiles[0];
+ value.archive.profiles=[{...person,id:'person-a'},{...person,id:'person-b'}];
+ value.archive.idAliases={'person':{name:person.name,targets:['person-a','person-b']},'old-bookmark':{name:person.name,targets:['person-a','person-b']}};
+ return value;
+}
+function nextReport(env,previous){
+ const value=structuredClone(previous),itemId='item-next',reportId='next-report',contentHash='c'.repeat(64),path='/api/archive-imports/'+itemId+'/assets/'+assetHash+'/';
+ env.sql.prepare('INSERT INTO archive_items(owner_id,id,body,content_hash,revision,created_at,updated_at) VALUES(?,?,?,?,1,?,?)').run('owner',itemId,JSON.stringify({id:itemId,kind:'file',file:{name:'next.pdf',type:'application/pdf',size:100}}),contentHash,'now','now');
+ for(const ext of ['jpg','txt'])env.objects.set('processed/owner/'+itemId+'/'+assetHash+'/page-1.'+ext,new Uint8Array([1]));
+ value.archive.documents.push({id:reportId,title:'Next synthetic report',sha256:contentHash,pages:1,url:`/api/archive-items/${itemId}/file?inline=1`,importItemId:itemId,pageAssets:[{image:path+'page-1.jpg',text:path+'page-1.txt'}]});
+ value.inputs[reportId]={text:'Next synthetic report'};value.sourcePeople.sourceHashes[reportId]=contentHash;value.sourcePeople.pages[reportId]={1:[]};
+ for(const part of ['archive','tree','privateDetails','sourcePeople'])value[part].snapshotId='next-candidate';
+ value.baseRevision=1;value.imported={itemId,reportId,sha256:contentHash,people:1,pictures:0};return value;
+}
+test('split profiles preserve old bookmarks through commit and reload without choosing an identity',async()=>{
+ const {handleArchiveImports:handle,archivePart,archiveCatalog}=await import('../worker/archive-imports.mjs'),env=environment();
+ const prior={...base,profileIds:['person'],profileAliases:{'old-bookmark':{name:'Synthetic Person',targets:['person']}}};
+ const response=await handle(request('/commit','POST',splitCandidate()),env,prior);assert.equal(response.status,200,JSON.stringify(await response.json()));
+ const saved=await (await archivePart(new Request('https://example.test/api/archive/archive',{headers:{'oai-authenticated-user-id':'owner'}}),env)).json();
+ const {resolveId}=require('../archive-model');
+ for(const link of ['person','old-bookmark'])assert.deepEqual(resolveId(link,saved.profiles,saved.idAliases),['person-a','person-b']);
+ assert.deepEqual((await archiveCatalog(env,'owner',prior)).profileAliases,saved.idAliases);
+});
+test('later reports preserve every split choice through renames and supported merges',async()=>{
+ const {handleArchiveImports:handle,archiveCatalog}=await import('../worker/archive-imports.mjs');
+ for(const merge of [false,true]){
+  const env=environment(),first=splitCandidate();assert.equal((await handle(request('/commit','POST',first),env,base)).status,200);
+  const next=nextReport(env,first);next.archive.profiles[0].id='renamed-person';
+  if(merge)next.archive.profiles.pop();
+  const targets=merge?['renamed-person']:['renamed-person','person-b'];
+  for(const alias of Object.values(next.archive.idAliases))alias.targets=[...targets];
+  next.archive.idAliases['person-a']={name:'Synthetic Person',targets:['renamed-person']};
+  if(merge)next.archive.idAliases['person-b']={name:'Synthetic Person',targets:['renamed-person']};
+  const response=await handle(request('/commit','POST',next),env,base);assert.equal(response.status,200,JSON.stringify(await response.json()));
+  const catalog=await archiveCatalog(env,'owner',base);assert.deepEqual(catalog.profileAliases['old-bookmark'].targets,targets);
+  assert.equal(env.sql.prepare('SELECT revision FROM archive_state').get().revision,2);
+ }
+});
+test('future imports cannot drop an old bookmark, one of its choices, or an existing person',async()=>{
+ const {handleArchiveImports:handle}=await import('../worker/archive-imports.mjs');
+ const invalid=[
+  v=>{delete v.archive.idAliases['old-bookmark'];},
+  v=>{v.archive.idAliases['old-bookmark'].targets=['person-a'];},
+  v=>{v.archive.profiles.pop();for(const a of Object.values(v.archive.idAliases))a.targets=['person-a'];},
+  v=>{v.archive.idAliases['old-bookmark'].targets=['person-a','missing'];},
+  v=>{v.archive.idAliases['old-bookmark'].targets=[];},
+  v=>{v.archive.idAliases['old-bookmark'].targets=['person'];}
+ ];
+ for(const modify of invalid){
+  const env=environment(),first=splitCandidate();assert.equal((await handle(request('/commit','POST',first),env,base)).status,200);
+  const before=env.sql.prepare('SELECT body,revision FROM archive_state').get(),next=nextReport(env,first);modify(next);
+  const response=await handle(request('/commit','POST',next),env,base);assert.equal(response.status,400);assert.match((await response.json()).error,/person link/);
+  assert.deepEqual(env.sql.prepare('SELECT body,revision FROM archive_state').get(),before);
+ }
+});
 test('complete imports persist atomically, update validation catalog, and isolate owners',async()=>{
  const {handleArchiveImports:handle,archivePart,archiveCatalog}=await import('../worker/archive-imports.mjs'),env=environment();
  const response=await handle(request('/commit','POST',candidate()),env,base);assert.equal(response.status,200);assert.equal((await response.json()).revision,1);

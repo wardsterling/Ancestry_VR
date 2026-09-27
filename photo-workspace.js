@@ -84,12 +84,12 @@
     renderEditor();renderRegions();
     if(window.innerWidth<1100)$('#photoNotebook').scrollIntoView({behavior:'smooth',block:'start'});
   }
-  async function save(){
+  async function save({refreshMatches=true}={}){
     if(saving||!current()||restricted(current()))return false;
     pullFields();let value;
     try{value={...rules.validate(current(),catalog()),revision:current().revision||0};}catch(e){message(e.message,true);return false;}
     saving=true;$('#photoResearchEditor').querySelectorAll('input,select,textarea,button').forEach(node=>node.disabled=true);message('Saving…');
-    try{const response=await fetch('/api/photo-research/'+encodeURIComponent(value.id),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(value)});const data=await response.json();if(!response.ok)throw Error(data.error||'Could not save.');records.set(value.id,data.record);drafts.set(value.id,structuredClone(data.record));if(selected===value.id){dirty=false;message('Saved to your private notebook.');}renderRegions();window.WallMatches?.changed();return true;}
+    try{const response=await fetch('/api/photo-research/'+encodeURIComponent(value.id),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(value)});const data=await response.json();if(!response.ok)throw Error(data.error||'Could not save.');records.set(value.id,data.record);drafts.set(value.id,structuredClone(data.record));if(selected===value.id){dirty=false;message('Saved to your private notebook.');}renderRegions();if(refreshMatches)window.WallMatches?.changed();else window.WallMatches?.reviewChanged();return true;}
     catch(e){message((e.message==='Unexpected token'?'The notebook could not be reached.':e.message)+' Your draft has been kept on this page.',true);return false;}
     finally{saving=false;$('#photoResearchEditor').querySelectorAll('input,select,textarea,button').forEach(node=>node.disabled=restricted(current()));}
   }
@@ -278,7 +278,16 @@
     pullFields();const photoId=selected,prior=structuredClone(current());
     try{const value=rules.connectSourcePerson(current(),person,doc,note,{claimId:uid('claim'),evidenceId:uid('evidence')},catalog());if(confirmed)value.claims.find(c=>c.profileId===personId&&c.status!=='rejected').status='confirmed';drafts.set(photoId,value);dirty=true;renderEditor();const ok=await save();if(!ok){drafts.set(photoId,prior);dirty=JSON.stringify(prior)!==JSON.stringify(records.get(photoId));}if(selected===photoId)renderEditor();return ok;}catch(e){message(e.message,true);return false;}
   }
-  window.PhotoWorkspace={get ready(){return ready&&notebookLoaded;},get selected(){return current();},get photos(){return [...records.values()];},get busy(){return saving;},reload:load,ensureSaved:save,connectInline,selectPhoto,startWallDrawing,exportNotebook,importNotebook,archiveChanged,profileChanged,sourceChanged};
+  async function rejectSuggestion(key,rejected=true){
+    if(saving||!current()||restricted(current())||!/^[a-f0-9]{64}$/.test(key))return false;
+    pullFields();const photoId=selected,prior=structuredClone(current()),keys=new Set(prior.rejectedSuggestions||[]);
+    if(rejected)keys.add(key);else keys.delete(key);
+    drafts.set(photoId,{...prior,rejectedSuggestions:[...keys]});dirty=true;
+    const ok=await save({refreshMatches:false});
+    if(!ok){drafts.set(photoId,prior);dirty=JSON.stringify(prior)!==JSON.stringify(records.get(photoId));}
+    if(selected===photoId)renderEditor();if(ok&&!rejected)window.WallMatches?.request(photoId);return ok;
+  }
+  window.PhotoWorkspace={get ready(){return ready&&notebookLoaded;},get selected(){return current();},get photos(){return [...records.values()];},get busy(){return saving;},reload:load,ensureSaved:save,connectInline,rejectSuggestion,selectPhoto,startWallDrawing,exportNotebook,importNotebook,archiveChanged,profileChanged,sourceChanged};
   async function load(){
     const results=await Promise.allSettled([fetch('wall-catalog.json',{cache:'no-store'}).then(async r=>r.ok?(await r.json()).regions:[]),fetch('/api/photo-research',{cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Saved research is unavailable. Try reloading; unsaved drafts can be exported.');return (await r.json()).records;})]);
     if(results[0].status==='fulfilled')for(const p of results[0].value||[])records.set(p.id,p);

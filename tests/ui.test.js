@@ -15,7 +15,7 @@ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const script=fs.readFileSync(path.join(__dirname,'../search-ui.js'),'utf8');
 const fixture={profiles:[{id:'synthetic',name:'Example Test Person',aliases:['Tester'],birthYear:1800,deathYear:1870,
   years:['1800','1870'],places:['Demo City, VA'],facts:['Synthetic statement only.'],sources:[{reportId:'demo',title:'Synthetic report',page:1}],restricted:false}]};
-async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null,itemData=null,insightData=null,wallData=null) {
+async function setup(missing=false,hash='#archive',treeMissing=false,archive=fixture,treeData=null,privateData=null,photoData=null,itemData=null,insightData=null,wallData=null,recoveryData=null) {
   const nodes=new Map(), scopes=[];
   class Element {
     constructor(id,tag='DIV'){this.id=id;this.tagName=tag;this.value='';this.checked=false;this.hidden=false;this.open=false;this.textContent='';this.dataset={};this.attributes={};this.handlers={};this.options=[];this.selectedIndex=0;this.classList={toggle(){}};this.style={setProperty(){}};this.classList={toggle(){},add(){},remove(){}};this.scrollLeft=0;this.scrollTop=0;this.clientWidth=1000;this.clientHeight=400;nodes.set(id,this);}
@@ -67,6 +67,7 @@ async function setup(missing=false,hash='#archive',treeMissing=false,archive=fix
   if(photoData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../photo-workspace.js'),'utf8'),context);
   if(wallData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../wall-identification.js'),'utf8'),context);
   if(insightData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../person-insights.js'),'utf8'),context);
+  if(recoveryData){window.ArchiveLinkRecovery=require('../archive-link-recovery');window.ArchiveImport=recoveryData;vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-import-review.js'),'utf8'),context);}
   if(itemData)vm.runInContext(fs.readFileSync(path.join(__dirname,'../archive-intake.js'),'utf8'),context);
   await new Promise(resolve=>setImmediate(resolve));
   return {nodes,navigation,handlers,location,events,window,photoSaved,photoRequests,itemSaved,go(hash){location.hash=hash;for(const fn of events.hashchange||[])fn();}};
@@ -359,4 +360,29 @@ test('picture-number switch is independent of outlines and close-ups follow livi
  assert.equal(app.nodes.get('wallIdentify').hidden,true);assert.equal(app.nodes.get('photoAugments').hidden,true);
  const changes=[];app.nodes.get('wallRegions').classList.toggle=(name,value)=>changes.push({name,value});app.nodes.get('wallNumbers').checked=true;app.nodes.get('wallNumbers').emit('change');app.nodes.get('wallMarkers').checked=false;app.nodes.get('wallMarkers').emit('change');
  assert.deepEqual(changes,[{name:'hide-numbers',value:false},{name:'hide-outlines',value:true}]);
+});
+test('Identify this picture rejects and restores a suggestion without asserting an identity',async()=>{
+ const archive={...fixture,documents:[{id:'demo',title:'Synthetic report',pages:1,url:'source-documents/demo.pdf'}]};
+ const app=await setup(false,'#wall?photo=wall-example',false,archive,null,null,{regions:[samplePhoto]},null,null,{});await tick();
+ const suggestion={id:'person:synthetic',personId:'synthetic',label:'Example Test Person',url:'assets/synthetic.jpg',crop:[0,0,100,100],source:{reportId:'demo',page:1},suggestionKey:'a'.repeat(64)};
+ app.window.WallMatches={request(){},reviewChanged(){app.window.WallIdentification.matchesChanged();},forPhoto(){const rejected=app.window.PhotoWorkspace.selected.rejectedSuggestions?.includes(suggestion.suggestionKey);return {matches:rejected?[]:[suggestion],rejected:rejected?[suggestion]:[],compared:1,faceAvailable:true,faces:1};}};
+ app.window.WallIdentification.matchesChanged();assert.match(app.nodes.get('photoMatchResults').innerHTML,/Reject suggestion/);
+ clickDataset(app,'rejectMatch','0');await tick();assert.deepEqual(Array.from(app.photoSaved.at(-1).rejectedSuggestions),[suggestion.suggestionKey]);assert.equal(app.photoSaved.at(-1).claims.length,0);assert.match(app.nodes.get('photoMatchResults').innerHTML,/Undo rejection/);
+ clickDataset(app,'undoMatch','0');await tick();assert.equal(app.photoSaved.at(-1).rejectedSuggestions.length,0);assert.match(app.nodes.get('photoMatchResults').innerHTML,/Reject suggestion/);
+});
+test('failed rejection remains visible and reports that it was not saved',async()=>{
+ const archive={...fixture,documents:[{id:'demo',title:'Synthetic report',pages:1,url:'source-documents/demo.pdf'}]};
+ const app=await setup(false,'#wall?photo=wall-example',false,archive,null,null,{regions:[samplePhoto],saveFailure:true},null,null,{});await tick();
+ const suggestion={label:'Example',source:{reportId:'demo',page:1},crop:[0,0,100,100],url:'assets/example.jpg',suggestionKey:'b'.repeat(64)};
+ app.window.WallMatches={forPhoto:()=>({matches:[suggestion],rejected:[],compared:1,faceAvailable:true,faces:1})};app.window.WallIdentification.matchesChanged();clickDataset(app,'rejectMatch','0');await tick();
+ assert.equal(app.photoSaved.length,0);assert.equal(app.window.PhotoWorkspace.selected.rejectedSuggestions?.length||0,0);assert.match(app.nodes.get('photoMatchStatus').textContent,/could not be saved/);assert.match(app.nodes.get('photoMatchResults').innerHTML,/Reject suggestion/);
+});
+test('broken-link review offers preserve or reconnect and keeps failed saves available for retry',async()=>{
+ const calls=[],api={queue(){},async saveReview(id,choices){calls.push({id,choices:{...choices}});if(calls.length===1)throw Error('Temporary storage problem.');}};
+ const app=await setup(false,'#archive',false,fixture,null,null,null,null,null,null,api);
+ const job={item:{id:'item-report'},choices:{},previous:{archive:{profiles:[{id:'old',name:'Earlier Person',sources:[]}]}},result:{archive:{profiles:[{id:'synthetic',name:'Example Test Person',sources:[]}]}}};
+ app.window.ArchiveImportReview.open(job);assert.equal(app.nodes.get('archiveLinkReview').open,true);assert.match(app.nodes.get('archiveLinkReviewRows').innerHTML,/Keep existing person for review/);
+ app.nodes.get('archiveLinkReviewRows').emit('change',{target:{dataset:{repairChoice:'0'},value:'synthetic'}});
+ app.nodes.get('archiveLinkReviewForm').emit('submit');await tick();assert.equal(calls[0].choices.old,'synthetic');assert.equal(app.nodes.get('archiveLinkReview').open,true);assert.match(app.nodes.get('archiveLinkReviewStatus').textContent,/original PDF remains saved/);
+ app.nodes.get('archiveLinkReviewForm').emit('submit');await tick();assert.equal(app.nodes.get('archiveLinkReview').open,false);
 });

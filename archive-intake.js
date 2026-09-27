@@ -67,7 +67,7 @@
   function incorporation(item){
     if(item.file?.type!=='application/pdf')return '';
     const doc=app()?.documents.find(d=>(d.importItemId===item.id||item.contentHash&&d.sha256===item.contentHash)),state=window.ArchiveImport?.status(item.id);
-    return `<div class="archive-import-status ${state?.error?'notebook-error':''}" role="status">${esc(state?.text||(doc?'Incorporated into the archive':'Saved · preparing source pages and family records…'))}${state?.error?` <button class="secondary" data-retry-import="${esc(item.id)}">Retry incorporation</button>`:''}${doc?` <a href="#archive?document=${esc(doc.id)}&page=1" data-source-id="${esc(doc.id)}" data-source-page="1">Read source pages</a> <a href="#archive?report=${esc(doc.id)}&view=tree">Explore family tree</a>`:''}</div>`;
+    return `<div class="archive-import-status ${state?.error?'notebook-error':''}" role="status">${esc(state?.text||(doc?'Incorporated into the archive':'Saved · preparing source pages and family records…'))}${state?.error?` <button class="secondary" data-retry-import="${esc(item.id)}">${state?.repair?'Repair links &amp; save':'Retry incorporation'}</button>`:''}${doc?` <a href="#archive?document=${esc(doc.id)}&page=1" data-source-id="${esc(doc.id)}" data-source-page="1">Read source pages</a> <a href="#archive?report=${esc(doc.id)}&view=tree">Explore family tree</a>`:''}</div>`;
   }
   function pendingReports(documents){return [...records.values()].filter(i=>i.file?.type==='application/pdf'&&!documents.some(d=>(d.importItemId===i.id||i.contentHash&&d.sha256===i.contentHash))).map(i=>({id:i.id,title:i.title.replace(/\.pdf$/i,''),importItemId:i.id,pending:true}));}
   function renderCollections(){

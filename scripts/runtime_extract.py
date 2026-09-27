@@ -62,18 +62,23 @@ def _rebuild(payload):
         return {'error': '; '.join(result['errors']), 'issues': fatal[:20]}
     aliases = archive.get('idAliases', {})
     people = {p['id']: p for p in archive['profiles']}
-    def resolve(pid):
-        targets = aliases.get(pid, {}).get('targets', [pid])
-        return targets[0] if len(targets) == 1 and targets[0] in people else None
+    def resolve_targets(pid, source=None):
+        targets = [target for target in aliases.get(pid, {}).get('targets', [pid]) if target in people]
+        if source:
+            targets = [target for target in targets if any(
+                s['reportId'] == source['reportId'] and s['page'] == source['page']
+                for s in people[target]['sources'])]
+        return list(dict.fromkeys(targets))
     private = ex.private_details
     old_private = payload.get('privateDetails', {}).get('profiles', {})
     # Preserve existing source portraits through stable IDs and evidence-based merges.
     for old in previous['profiles']:
-        pid = resolve(old['id'])
-        if not pid:
-            continue
         portrait = old.get('portrait') or old_private.get(old['id'], {}).get('portrait')
         if portrait:
+            targets = resolve_targets(old['id'], portrait.get('source'))
+            if len(targets) != 1:
+                continue
+            pid = targets[0]
             if people[pid]['restricted']:
                 private.setdefault(pid, {})['portrait'] = copy.deepcopy(portrait)
             else:
@@ -83,8 +88,8 @@ def _rebuild(payload):
         for page, marks in pages.items():
             keep = []
             for mark in marks:
-                ids = list(dict.fromkeys(resolve(pid) for pid in mark['profileIds']))
-                ids = [pid for pid in ids if pid and any(s['reportId'] == doc_id and s['page'] == int(page) for s in people[pid]['sources'])]
+                ids = list(dict.fromkeys(target for pid in mark['profileIds']
+                    for target in resolve_targets(pid, {'reportId': doc_id, 'page': int(page)})))
                 if ids:
                     keep.append({**mark, 'profileIds': ids})
             pages[page] = keep
@@ -123,6 +128,7 @@ def _rebuild(payload):
             else:
                 rid = hashlib.sha256((added['sha256']+str(number)+str(region['bbox'])).encode()).hexdigest()[:24]
                 unidentified.append({'id': 'report-'+rid, 'kind': 'report', 'title': 'Unidentified report portrait', 'reportId': added['id'], 'page': number, 'rect': [x0/width*100,y0/height*100,(x1-x0)/width*100,(y1-y0)/height*100], 'notes':'', 'claims':[], 'evidence':[], 'unidentifiedPeople':False})
+    archive['linkRepairs'] = copy.deepcopy(previous.get('linkRepairs', []))
     archive['documents'] = documents
     archive['unidentifiedPortraits'] = unidentified
     archive['livingDetailsAvailable'] = True

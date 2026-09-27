@@ -6,6 +6,15 @@ globalThis.PhotoResearch=require('../photo-research');
 const catalog={profileIds:['example-person'],documents:[{id:'report',pages:10}]};
 function storage(){const sql=new DatabaseSync(':memory:');sql.exec(fs.readFileSync('drizzle/0000_tricky_namorita.sql','utf8'));return {prepare(query){return {bind(...params){return {async all(){return {results:sql.prepare(query).all(...params)}}}}}}};}
 const record=()=>({id:'photo1',kind:'wall',title:'Example picture',rect:[1,2,3,4],notes:'Recorded caption',claims:[],evidence:[],revision:0});
+test('rejected picture suggestions persist across sessions, support undo, and stay owner-private',async()=>{
+ const {handleResearch}=await import('../worker/index.mjs'),env={DB:storage()},key='a'.repeat(64);
+ const input={...record(),rejectedSuggestions:[key]};let response=await handleResearch(request('PUT','owner',input),env,catalog);assert.equal(response.status,200);
+ const saved=(await (await handleResearch(request(),env,catalog)).json()).records[0];assert.deepEqual(saved.rejectedSuggestions,[key]);assert.equal(saved.claims.length,0);assert.equal(PhotoResearch.awaitingIdentification(saved,catalog),true);
+ assert.deepEqual((await (await handleResearch(request('GET','other'),env,catalog)).json()).records,[]);
+ response=await handleResearch(request('PUT','owner',{...saved,rejectedSuggestions:[]}),env,catalog);assert.equal(response.status,200);
+ assert.deepEqual((await (await handleResearch(request(),env,catalog)).json()).records[0].rejectedSuggestions,[]);
+ assert.throws(()=>PhotoResearch.validate({...record(),rejectedSuggestions:['not-a-valid-key']},catalog),/rejected suggestion/);
+});
 function request(method='GET',owner='owner',data=null,origin='https://example.test'){return new Request('https://example.test/api/photo-research'+(method==='PUT'?'/photo1':''),{method,headers:{...(owner?{'oai-authenticated-user-id':owner}:{}),origin,'content-type':'application/json'},...(data?{body:JSON.stringify(data)}:{})});}
 test('photo API persists records with real SQLite, isolates owners, and rejects stale writes',async()=>{
  const {handleResearch}=await import('../worker/index.mjs'),env={DB:storage()};

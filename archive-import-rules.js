@@ -2,6 +2,19 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ArchiveImportRules=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
   const id=/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,119}$/;
   const asset=/^\/api\/archive-imports\/(item-[a-zA-Z0-9_-]+)\/assets\/([a-f0-9]{64})\/(page-\d+\.(?:jpg|txt)|portrait-\d+-\d+\.jpg)$/;
+  function linkIssues(archive,base){
+    const people=new Set((archive.profiles||[]).map(p=>p.id)),aliases=archive.idAliases||{},issues=new Map();
+    const targets=pid=>aliases[pid]?.targets||(people.has(pid)?[pid]:[]);
+    const valid=ids=>Array.isArray(ids)&&ids.length&&ids.every(id=>people.has(id));
+    const add=(id,reason)=>issues.set(id,{id,reason});
+    for(const [pid,alias] of Object.entries(aliases))if(!valid(alias?.targets))add(pid,'A saved person link is broken.');
+    for(const pid of base.profileIds||[])if(!valid(targets(pid)))add(pid,'An existing person link would be lost.');
+    for(const [pid,alias] of Object.entries(base.profileAliases||{})){
+      const saved=targets(pid),destinations=(alias.targets||[]).map(targets);
+      if(!valid(saved)||destinations.some(ids=>!valid(ids)||ids.some(id=>!saved.includes(id))))add(pid,'An existing person link would be lost.');
+    }
+    return [...issues.values()];
+  }
   function validate(value,base,items){
     const fail=message=>{throw Error(message);},a=value.archive,t=value.tree,details=value.privateDetails,index=value.sourcePeople;
     if(!a||a.schemaVersion!==2||!a.validation?.passed||!t||t.version!==2||!a.snapshotId||[t.snapshotId,details?.snapshotId,index?.snapshotId].some(s=>s!==a.snapshotId))fail('The import must be one validated archive snapshot.');
@@ -19,8 +32,8 @@
       docs.set(d.id,d);
     }
     for(const d of base.documents)if(!docs.has(d.id))fail('An existing source report is missing.');
-    const resolve=pid=>{if(people.has(pid))return pid;const targets=a.idAliases?.[pid]?.targets;return targets?.length===1&&people.has(targets[0])?targets[0]:null;};
-    for(const pid of base.profileIds||[])if(!resolve(pid))fail('An existing person link would be lost.');
+    const broken=linkIssues(a,base);
+    if(broken.length)throw Object.assign(Error(broken[0].reason),{code:'PERSON_LINK_REVIEW_REQUIRED',links:broken});
     const page=s=>{const d=docs.get(s?.reportId);if(!d||!Number.isInteger(s.page)||s.page<1||s.page>d.pages)fail('A citation points to an unavailable source page.');};
     const checkPortrait=p=>{if(!p?.portrait)return;const s=p.portrait.src;if(typeof s!=='string'||!(/^assets\/[a-zA-Z0-9_./-]+\.(?:jpg|jpeg|png|webp)$/.test(s)&&!s.includes('..')||asset.test(s)))fail('Invalid portrait image.');const derivative=asset.exec(s);if(derivative&&![...docs.values()].some(d=>d.importItemId===derivative[1]))fail('A portrait belongs to an unavailable report.');if(p.portrait.source)page(p.portrait.source);};
     for(const p of people.values()){
@@ -28,7 +41,6 @@
       if(p.restricted&&(p.portrait||p.facts?.length||p.years?.length||p.places?.length||['birthDate','birthYear','birthPlace','deathDate','deathYear','deathPlace'].some(k=>p[k])))fail('Living-person details must remain behind the display switch.');
     }
     for(const [pid,p] of Object.entries(details.profiles||{})){if(!people.has(pid))fail('Living details refer to a missing person.');checkPortrait(p);}
-    for(const alias of Object.values(a.idAliases||{}))if(!Array.isArray(alias.targets)||!alias.targets.length||alias.targets.some(pid=>!people.has(pid)))fail('A saved person link is broken.');
     const graph=new Map();
     for(const e of t.edges){if(!people.has(e.parentId)||!people.has(e.childId)||e.parentId===e.childId||!Array.isArray(e.evidence)||!e.evidence.length)fail('Invalid family relationship.');page(e);e.evidence.forEach(page);if(e.kind!=='family-group'){if(!graph.has(e.parentId))graph.set(e.parentId,[]);graph.get(e.parentId).push(e.childId);}}
     const colors=new Map();function visit(pid){if(colors.get(pid)===1)fail('Family relationships form a cycle.');if(colors.get(pid)===2)return;colors.set(pid,1);for(const child of graph.get(pid)||[])visit(child);colors.set(pid,2);}for(const pid of graph.keys())visit(pid);
@@ -44,5 +56,5 @@
     const imported=value.imported;if(!imported||!owned.has(imported.itemId)||docs.get(imported.reportId)?.importItemId!==imported.itemId||owned.get(imported.itemId).content_hash!==imported.sha256)fail('This import does not match the saved item.');
     return {documents:[...docs.values()].map(({id,pages,sha256,url})=>({id,pages,sha256,url})),profileIds:[...people.keys()],profileAliases:a.idAliases||{},baseSnapshot:base.baseSnapshot};
   }
-  return {validate,asset};
+  return {validate,asset,linkIssues};
 });

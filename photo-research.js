@@ -63,7 +63,8 @@
       return {id:c.id,profileId,label,status:c.status,evidenceIds};
     });
     if(new Set(claims.map(c=>c.id)).size!==claims.length)throw Error('Duplicate claim IDs.');
-    return {id:input.id,kind:input.kind,title:clean(input.title,160)||'Unidentified photograph',rect:rectangle(input.rect),...(input.kind==='report'?{reportId:input.reportId,page:input.page}:{}),notes:clean(input.notes,4000),unidentifiedPeople:input.unidentifiedPeople===true,claims,evidence};
+    const rejected=input.rejectedSuggestions||[];if(!Array.isArray(rejected)||rejected.length>300||rejected.some(key=>typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key)))throw Error('Invalid rejected suggestion list.');
+    return {id:input.id,kind:input.kind,title:clean(input.title,160)||'Unidentified photograph',rect:rectangle(input.rect),...(input.kind==='report'?{reportId:input.reportId,page:input.page}:{}),notes:clean(input.notes,4000),unidentifiedPeople:input.unidentifiedPeople===true,claims,evidence,rejectedSuggestions:[...new Set(rejected)]};
   }
   function connectSourcePerson(photo,person,source,note,ids,catalog={}){
     if(!person?.id||!source||(person.sources||[]).every(s=>s.reportId!==source.id||s.page!==source.page))throw Error('Choose a person cited on this source page.');
