@@ -3,7 +3,7 @@
   'use strict';
   const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const app=()=>window.ArchiveApp,workspace=()=>window.PhotoWorkspace,rules=window.PhotoAugmentRules;
-  let photo=null,hidden=false,personId='',pageFilter=null,augments=[],augmentState='idle',editor=null,editorImage=null,editorFile=null,objectUrl=null,editingDirty=false,busy=false,searchToken=0,loadToken=0,captureToken=0;
+  let photo=null,hidden=false,personId='',pageFilter=null,peopleLimit=20,augments=[],augmentState='idle',editor=null,editorImage=null,editorFile=null,objectUrl=null,editingDirty=false,busy=false,searchToken=0,loadToken=0,captureToken=0;
   let matches=[],rejectedMatches=[],lastSnapshot='',lastLiving=false,lastMatchMarkup='';
   const status=(id,text)=>$(id).textContent=text;
   const validSelection=()=>photo&&workspace()?.selected?.id===photo.id&&!hidden;
@@ -12,11 +12,17 @@
   function switchMode(mode){$('identifyNamePanel').hidden=mode!=='name';$('identifyMatchPanel').hidden=mode!=='photo';$('identifyByName').setAttribute('aria-pressed',String(mode==='name'));$('identifyByPhoto').setAttribute('aria-pressed',String(mode==='photo'));}
   function renderNames(){
     if(!photo||hidden)return;
-    const report=$('identifyReport').value,q=$('identifySearch').value.trim();
-    const people=pageFilter?(app()?.profiles||[]).filter(p=>p.sources.some(s=>s.reportId===pageFilter.reportId&&s.page===pageFilter.page)&&(!q||p.name.toLowerCase().includes(q.toLowerCase()))):q?app()?.search(q,report)||[]:[];
-    const available=people.filter(p=>!p.restricted);
-    $('identifyCandidates').innerHTML=(pageFilter?'<p>People cited on this page. <button class="text-button" data-clear-page-filter>Search all pages</button></p>':'')+available.slice(0,20).map(p=>`<button type="button" data-identify-person="${esc(p.id)}">${p.portrait?.src?`<img src="${esc(window.ProfilePresentation.safePortrait(p.portrait.src))}" alt="" loading="lazy">`:''}<span><strong>${esc(p.name)}</strong><small>${esc([p.birthDate,p.birthPlace].filter(Boolean).join(' · ')||'Dates and place not recorded')}</small></span></button>`).join('')+(!available.length?'<p>'+(q?'No visible matches. Try another spelling or turn on living-person details above.':'Type a name to search all source reports.')+'</p>':'');
+    const report=pageFilter?.reportId||$('identifyReport').value,q=$('identifySearch').value.trim();
+    const people=(app()?.searchPeople(q,report)||[]).filter(p=>!pageFilter||(p.sources||[]).some(s=>s.reportId===pageFilter.reportId&&s.page===pageFilter.page));
+    const visible=people.slice(0,peopleLimit),portraits=people.filter(p=>window.ProfilePresentation.describe(p).portrait).length,restricted=people.filter(p=>p.restricted).length;
+    $('identifyPeopleSummary').textContent=app()?.ready?`${people.length} matching people · ${portraits} with visible portraits${restricted?` · ${restricted} with details hidden`:''} · showing ${visible.length}`:'Waiting for the source archive. Reconnect above if it cannot load.';
+    $('identifyMorePeople').hidden=visible.length>=people.length;
+    $('identifyCandidates').innerHTML=(pageFilter?`<p>People cited on page ${pageFilter.page}. <button class="text-button" data-clear-page-filter>Search all pages</button></p>`:'')+visible.map(p=>{
+      const details=window.ProfilePresentation.describe(p),sources=(p.sources||[]).filter(s=>(!report||s.reportId===report)&&(!pageFilter||s.page===pageFilter.page)),citations=[...new Set(sources.map(s=>`${s.title} · p. ${s.page}`))];
+      return `<button type="button" data-identify-person="${esc(p.id)}"${p.restricted?' disabled':''}>${details.portrait?`<img src="${esc(details.portrait)}" alt="" loading="lazy">`:''}<span><strong>${esc(p.name)}</strong>${p.aliases?.length?`<small>Also recorded as: ${esc(p.aliases.join(' · '))}</small>`:''}<small>${p.restricted?'Living-person details hidden — turn on “Show living-person details” in the archive to connect.':esc([p.birthDate,p.birthPlace].filter(Boolean).join(' · ')||'Dates and place not recorded')}</small>${!details.portrait&&!p.restricted?'<small>No source portrait — you can still link this person.</small>':''}<small>${esc(citations.slice(0,2).join(' · '))}${citations.length>2?` · ${citations.length-2} more citations`:''}</small></span></button>`;
+    }).join('')+(!people.length&&app()?.ready?'<p>No people match these filters. Try another spelling, choose another report, or clear the search.</p>':'');
   }
+  function resetNames(){peopleLimit=20;renderNames();}
   function choosePerson(id,source){
     if(!validSelection()||busy)return;const p=app().profiles.find(p=>p.id===id);if(!p||p.restricted)return;
     personId=id;$('identifyOtherUnknown').checked=!!workspace().selected?.unidentifiedPeople;switchMode('name');$('identifyReview').hidden=false;
@@ -92,12 +98,14 @@
   function photoChanged(p,restricted){
     const changed=photo?.id!==p?.id,privacyChanged=hidden!==restricted||lastLiving!==!!app()?.showLiving;lastLiving=!!app()?.showLiving;photo=p;hidden=restricted;
     $('wallIdentify').hidden=hidden;$('photoAugments').hidden=hidden;
-    if(lastSnapshot!==app()?.snapshotId){invalidateMatches();lastSnapshot=app()?.snapshotId;}
-    if(changed||privacyChanged){invalidateMatches();loadToken++;captureToken++;personId='';pageFilter=null;clearEditor();augments=[];augmentState='idle';$('augmentList').innerHTML='';$('augmentCount').textContent='';$('identifyReview').hidden=true;$('identifySearch').value='';$('identifyComment').value='';status('identifyStatus','');}
-    if(hidden)return;const report=$('identifyReport').value;$('identifyReport').innerHTML='<option value="">All reports</option>'+(app()?.documents||[]).map(d=>`<option value="${esc(d.id)}">${esc(d.title)}</option>`).join('');$('identifyReport').value=report;renderNames();renderSaved();if(changed||privacyChanged){loadAugments();switchMode('photo');}matchesChanged();
+    if(lastSnapshot!==app()?.snapshotId){invalidateMatches();peopleLimit=20;lastSnapshot=app()?.snapshotId;}
+    if(changed||privacyChanged){invalidateMatches();loadToken++;captureToken++;personId='';pageFilter=null;peopleLimit=20;clearEditor();augments=[];augmentState='idle';$('augmentList').innerHTML='';$('augmentCount').textContent='';$('identifyReview').hidden=true;$('identifySearch').value='';$('identifyComment').value='';status('identifyStatus','');}
+    if(hidden)return;const report=$('identifyReport').value;$('identifyReport').innerHTML='<option value="">All reports</option>'+(app()?.documents||[]).map(d=>`<option value="${esc(d.id)}">${esc(d.title)}</option>`).join('');$('identifyReport').value=(app()?.documents||[]).some(d=>d.id===report)?report:'';renderNames();renderSaved();if(changed||privacyChanged){loadAugments();switchMode('photo');}matchesChanged();
   }
   $('identifyByName').addEventListener('click',()=>switchMode('name'));$('identifyByPhoto').addEventListener('click',()=>{switchMode('photo');matchesChanged();});
-  $('identifySearch').addEventListener('input',renderNames);$('identifyReport').addEventListener('change',()=>{pageFilter=null;renderNames();});$('identifyCitation').addEventListener('change',renderCitation);
+  $('identifySearch').addEventListener('input',resetNames);$('identifyReport').addEventListener('change',()=>{pageFilter=null;resetNames();});
+  $('identifyMorePeople').addEventListener('click',()=>{peopleLimit+=20;renderNames();});
+  $('identifyClearSearch').addEventListener('click',()=>{pageFilter=null;$('identifySearch').value='';$('identifyReport').value='';resetNames();$('identifySearch').focus();});$('identifyCitation').addEventListener('change',renderCitation);
   $('confirmWallIdentity').addEventListener('click',()=>connect(true));$('proposeWallIdentity').addEventListener('click',()=>connect(false));
   $('captureAugment').addEventListener('click',()=>{if(validSelection()&&!busy)$('augmentCamera').click();});$('uploadAugment').addEventListener('click',()=>{if(validSelection()&&!busy)$('augmentFile').click();});
   for(const id of ['augmentCamera','augmentFile'])$(id).addEventListener('change',e=>capture(e.target.files?.[0]));
@@ -112,16 +120,16 @@
   $('findPhotoMatches').addEventListener('click',findMatches);$('cancelPhotoMatches').addEventListener('click',()=>{invalidateMatches();status('photoMatchStatus','Search stopped.');});
   document.addEventListener('click',e=>{
     const person=e.target.closest('[data-identify-person]');if(person){choosePerson(person.dataset.identifyPerson,pageFilter);return;}
-    if(e.target.closest('[data-clear-page-filter]')){pageFilter=null;renderNames();return;}
+    if(e.target.closest('[data-clear-page-filter]')){pageFilter=null;resetNames();return;}
     if(e.target.closest('[data-review-photo-research]')){$('advancedPhotoResearch').open=true;$('photoClaims').scrollIntoView?.({block:'nearest'});return;}
     if(e.target.closest('[data-reload-augments]')){loadAugments();return;}
     const edit=e.target.closest('[data-edit-augment]');if(edit){editAugment(edit.dataset.editAugment);return;}
     const remove=e.target.closest('[data-remove-augment]');if(remove){removeAugment(remove.dataset.removeAugment);return;}
     const reject=e.target.closest('[data-reject-match]');if(reject){rejectMatch(Number(reject.dataset.rejectMatch));return;}
     const undo=e.target.closest('[data-undo-match]');if(undo){rejectMatch(Number(undo.dataset.undoMatch),true);return;}
-    const match=e.target.closest('[data-review-match]');if(match){const m=matches[Number(match.dataset.reviewMatch)];if(!m)return;if(m.personId)choosePerson(m.personId,m.source);else{pageFilter=m.source;$('identifyReport').value=m.source.reportId;$('identifySearch').value='';switchMode('name');renderNames();}}
+    const match=e.target.closest('[data-review-match]');if(match){const m=matches[Number(match.dataset.reviewMatch)];if(!m)return;if(m.personId)choosePerson(m.personId,m.source);else{pageFilter=m.source;$('identifyReport').value=m.source.reportId;$('identifySearch').value='';switchMode('name');resetNames();}}
   });
   window.addEventListener('beforeunload',e=>{if(editingDirty){e.preventDefault();e.returnValue='';}});
-  window.WallIdentification={photoChanged,matchesChanged,showMatches(){switchMode('photo');matchesChanged();},close(){loadToken++;invalidateMatches();clearEditor();photo=null;},focus(){switchMode('name');$('identifySearch').focus();},get hasUnsaved(){return editingDirty;},allowLeave(){return !busy&&(!editingDirty||window.confirm('Discard the unsaved close-up edit before selecting another picture?'));}};
+  window.WallIdentification={photoChanged,matchesChanged,refreshPeople:renderNames,showMatches(){switchMode('photo');matchesChanged();},close(){loadToken++;invalidateMatches();clearEditor();photo=null;},focus(){switchMode('name');$('identifySearch').focus();},get hasUnsaved(){return editingDirty;},allowLeave(){return !busy&&(!editingDirty||window.confirm('Discard the unsaved close-up edit before selecting another picture?'));}};
   if(workspace()?.selected)photoChanged(workspace().selected,false);
 })();

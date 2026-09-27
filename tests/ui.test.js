@@ -414,3 +414,36 @@ test('report person search respects source and living-detail filters while keepi
  n('showLiving').checked=false;n('showLiving').emit('change');assert.match(n('portraitSummary').textContent,/0 matching people/);
  n('portraitQuery').value='Garcia';n('portraitSource').value='another-report';n('portraitSource').emit('change');assert.match(n('portraitSummary').textContent,/0 matching people/);
 });
+
+test('Identify this picture searches all cited people, aliases and new imports without a portrait or result cap',async()=>{
+ const source={reportId:'demo',title:'Synthetic report',page:1};
+ const people=Array.from({length:35},(_,i)=>({...fixture.profiles[0],id:'wilson-'+i,name:'Person '+String(i).padStart(2,'0')+' Wilson',aliases:[],sources:[source],portrait:i<2?{src:'assets/example-'+i+'.jpg'}:null}));
+ people.push({...fixture.profiles[0],id:'alias-person',name:'Changed Surname',aliases:['Former Wilson'],sources:[source]});
+ people.push({...fixture.profiles[0],id:'hidden-person',name:'Private Wilson',aliases:[],restricted:true,birthDate:'2001',birthPlace:'Secret Town',portrait:{src:'assets/hidden.jpg'},sources:[source]});
+ people.push({...fixture.profiles[0],id:'title-only',name:'Unrelated Person',aliases:[],sources:[{reportId:'other',title:'The Wilson Report',page:1}]});
+ const archive={profiles:people,documents:[{id:'demo',title:'Synthetic report',pages:1,url:'source-documents/demo.pdf'},{id:'other',title:'The Wilson Report',pages:1,url:'source-documents/other.pdf'}]};
+ const app=await setup(false,'#wall?photo=wall-example',false,archive,null,null,{regions:[samplePhoto]},null,null,{});await tick();const n=id=>app.nodes.get(id);
+ n('identifySearch').value='Wilson';n('identifySearch').emit('input');
+ assert.match(n('identifyPeopleSummary').textContent,/37 matching people · 2 with visible portraits · 1 with details hidden · showing 20/);
+ assert.equal(n('identifyMorePeople').hidden,false);assert.match(n('identifyCandidates').innerHTML,/No source portrait/);assert.doesNotMatch(n('identifyCandidates').innerHTML,/Unrelated Person/);
+ n('identifyMorePeople').emit('click');assert.match(n('identifyPeopleSummary').textContent,/showing 37/);assert.equal(n('identifyMorePeople').hidden,true);
+ assert.match(n('identifyCandidates').innerHTML,/data-identify-person="hidden-person" disabled/);assert.doesNotMatch(n('identifyCandidates').innerHTML,/2001|Secret Town|assets\/hidden/);
+ clickDataset(app,'identifyPerson','hidden-person');n('confirmWallIdentity').emit('click');await tick();assert.equal(app.photoSaved.length,0);
+ n('identifyReport').value='other';n('identifyReport').emit('change');assert.match(n('identifyPeopleSummary').textContent,/0 matching people/);
+ n('identifyClearSearch').emit('click');assert.equal(n('identifySearch').value,'');assert.equal(n('identifyReport').value,'');assert.match(n('identifyPeopleSummary').textContent,/38 matching people.*showing 20/);
+ n('identifySearch').value='Wilson';n('identifySearch').emit('input');people.push({...fixture.profiles[0],id:'new-upload',name:'New Wilson',aliases:[],sources:[{reportId:'new-report',title:'Newly uploaded report',page:1}]});archive.documents.push({id:'new-report',title:'Newly uploaded report',pages:1,url:'source-documents/new-report.pdf'});
+ await app.window.ArchiveApp.reload();assert.match(n('identifyPeopleSummary').textContent,/38 matching people/);assert.match(n('identifyReport').innerHTML,/Newly uploaded report/);
+ n('identifyReport').value='new-report';n('identifyReport').emit('change');assert.match(n('identifyPeopleSummary').textContent,/1 matching people/);assert.match(n('identifyCandidates').innerHTML,/New Wilson/);
+ clickDataset(app,'identifyPerson','new-upload');n('identifyCitation').value='new-report|1';n('confirmWallIdentity').emit('click');await tick();assert.equal(app.photoSaved.at(-1).claims[0].profileId,'new-upload');assert.equal(app.photoSaved.at(-1).evidence[0].reportId,'new-report');
+});
+
+test('Identify source-page suggestions use normalized alias search and retain the exact citation',async()=>{
+ const people=[{...fixture.profiles[0],id:'alias-person',name:'Changed Surname',aliases:['María O’Neill'],sources:[{reportId:'demo',title:'Synthetic report',page:2}]},{...fixture.profiles[0],id:'wrong-page',name:'Other María O’Neill',sources:[{reportId:'demo',title:'Synthetic report',page:1}]}];
+ const archive={profiles:people,documents:[{id:'demo',title:'Synthetic report',pages:2,url:'source-documents/demo.pdf'}]};
+ const app=await setup(false,'#wall?photo=wall-example',false,archive,null,null,{regions:[samplePhoto]},null,null,{});await tick();const n=id=>app.nodes.get(id);
+ const suggestion={label:'Unidentified source portrait',source:{reportId:'demo',page:2},crop:[0,0,100,100],url:'assets/example.jpg'};
+ app.window.WallMatches={forPhoto:()=>({matches:[suggestion],rejected:[],compared:1})};app.window.WallIdentification.matchesChanged();clickDataset(app,'reviewMatch','0');
+ n('identifySearch').value="o'neill maria";n('identifySearch').emit('input');assert.match(n('identifyPeopleSummary').textContent,/1 matching people/);assert.match(n('identifyCandidates').innerHTML,/Changed Surname/);assert.doesNotMatch(n('identifyCandidates').innerHTML,/wrong-page/);
+ clickDataset(app,'identifyPerson','alias-person');assert.equal(n('identifyCitation').value,'demo|2');n('confirmWallIdentity').emit('click');await tick();assert.equal(app.photoSaved.at(-1).evidence[0].page,2);
+ clickDataset(app,'clearPageFilter','');assert.match(n('identifyPeopleSummary').textContent,/2 matching people/);
+});
