@@ -3,7 +3,7 @@
   const VERSION='wall-align-1';
   function project(h,x,y){const z=h[6]*x+h[7]*y+h[8];return Math.abs(z)<1e-8?null:[(h[0]*x+h[1]*y+h[2])/z,(h[3]*x+h[4]*y+h[5])/z];}
   function bounds(points){return [Math.min(...points.map(p=>p[0])),Math.min(...points.map(p=>p[1])),Math.max(...points.map(p=>p[0])),Math.max(...points.map(p=>p[1]))];}
-  function mapRegions(h,regions,baseSize,refSize,inliers){
+  function mapRegions(h,regions,baseSize,refSize,inliers,reviewed=false){
     const [bw,bh]=baseSize,[rw,rh]=refSize,extent=bounds(inliers.map(p=>p.from)),mappings=[];
     for(const region of regions){
       const [x,y,w,t]=region.rect.map((n,i)=>n*(i%2?bh:bw)/100),quad=[[x,y],[x+w,y],[x+w,y+t],[x,y+t]].map(p=>project(h,...p));
@@ -11,14 +11,43 @@
       const crosses=quad.map((p,i)=>{const q=quad[(i+1)%4],r=quad[(i+2)%4];return (q[0]-p[0])*(r[1]-q[1])-(q[1]-p[1])*(r[0]-q[0]);});
       if(!crosses.every(c=>c>0))continue; // Reject reflections, folded or singular transforms.
       const [left,top,right,bottom]=bounds(quad),cw=right-left,ch=bottom-top;
-      if(cw<18||ch<18||cw>rw*.8||ch>rh*.9||left<-.005*rw||top<-.005*rh||right>rw*1.005||bottom>rh*1.005)continue;
+      if(cw<18||ch<18||cw>rw*(reviewed?1.01:.8)||ch>rh*(reviewed?1.01:.9)||left<-.005*rw||top<-.005*rh||right>rw*1.005||bottom>rh*1.005)continue;
       const nearby=inliers.filter(p=>p.from[0]>=x-w&&p.from[0]<=x+2*w&&p.from[1]>=y-t&&p.from[1]<=y+2*t).length;
       const inside=x>=extent[0]-w*.5&&x+w<=extent[2]+w*.5&&y>=extent[1]-t*.5&&y+t<=extent[3]+t*.5;
-      if(nearby<2||!inside)continue; // Never extrapolate links into an unobserved wall section.
+      if(reviewed?!quadWithinHull([[x,y],[x+w,y],[x+w,y+t],[x,y+t]],inliers.map(p=>p.from)):nearby<2||!inside)continue; // Never extrapolate links into an unobserved wall section.
       const l=Math.max(0,left),u=Math.max(0,top),r=Math.min(rw,right),b=Math.min(rh,bottom);
       mappings.push({photoId:region.id,crop:[100*l/rw,100*u/rh,100*(r-l)/rw,100*(b-u)/rh].map(n=>Math.round(n*10000)/10000),support:nearby});
     }
     return mappings;
+  }
+  function hull(points){
+    const list=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]),cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+    const half=values=>{const out=[];for(const p of values){while(out.length>1&&cross(out.at(-2),out.at(-1),p)<=0)out.pop();out.push(p);}return out;};
+    return [...half(list).slice(0,-1),...half(list.reverse()).slice(0,-1)];
+  }
+  function quadWithinHull(quad,points){const edge=hull(points);return edge.length>=3&&quad.every(p=>edge.every((a,i)=>{const b=edge[(i+1)%edge.length];return (b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0])>=-Math.hypot(b[0]-a[0],b[1]-a[1])*2;}));}
+  function diagnostics(good,inliers,base,reference){
+    // Keep an editable, bounded sample of the geometric evidence, never face identities.
+    const keep=good.filter((p,i)=>inliers[i]),reject=good.filter((p,i)=>!inliers[i]);
+    const sample=(values,max)=>values.filter((_,i)=>i%Math.max(1,Math.ceil(values.length/max))===0).slice(0,max);
+    return [...sample(keep,40),...sample(reject,40)].map((p,i)=>({id:'point-'+(i+1),from:p.from.map((n,j)=>100*n/(j?base.height:base.width)),to:p.to.map((n,j)=>100*n/(j?reference.height:reference.width)),enabled:true,conflict:!keep.includes(p),origin:'automatic'}));
+  }
+  function alignPoints(cv,points,regions,baseSize,refSize){
+    const active=points.filter(p=>p.enabled!==false),fail=(reason,checked=points)=>({status:'review',regions:[],inliers:0,reason,points:checked,method:'reviewed'});
+    if(active.length<4)return fail('Keep at least four matching point pairs, spread around the wall section.');
+    const from=active.map(p=>p.from.map((n,i)=>n*baseSize[i]/100)),to=active.map(p=>p.to.map((n,i)=>n*refSize[i]/100));
+    for(const values of [from,to]){const edge=hull(values),area=Math.abs(edge.reduce((sum,p,i)=>{const q=edge[(i+1)%edge.length];return sum+p[0]*q[1]-q[0]*p[1];},0))/2;if(edge.length<3||area<100)return fail('Spread the points across the image; points along one line cannot align it.');}
+    let a,b,h,mask;
+    try{
+      a=cv.matFromArray(active.length,1,cv.CV_32FC2,from.flat());b=cv.matFromArray(active.length,1,cv.CV_32FC2,to.flat());mask=new cv.Mat();h=cv.findHomography(a,b,cv.RANSAC,4,mask,3000,.995);
+      if(h.empty())return fail('These points do not form a reliable alignment. Replace a point or link an individual picture below.');
+      const matrix=Array.from(h.data64F),inliers=active.map((p,i)=>({from:from[i],to:to[i],id:p.id})).filter((p,i)=>mask.data[i]),ids=new Set(inliers.map(p=>p.id)),checked=points.map(p=>({...p,conflict:p.enabled!==false?!ids.has(p.id):p.conflict}));
+      if(inliers.length<4||inliers.length/active.length<.75)return fail('Some enabled points still conflict. Exclude the marked points, or replace them with matching frame corners.',checked);
+      const errors=inliers.map(p=>{const q=project(matrix,...p.from);return q?Math.hypot(q[0]-p.to[0],q[1]-p.to[1]):Infinity;}).sort((a,b)=>a-b),error=errors[Math.floor(errors.length/2)];
+      if(error>3)return fail('The points are still too far apart. Adjust the matching corners and check again.',checked);
+      const mapped=mapRegions(matrix,regions,baseSize,refSize,inliers,true);
+      return {status:mapped.length?'aligned':'review',regions:mapped,inliers:inliers.length,error,points:checked,method:'reviewed',reason:mapped.length?'':'No complete wall picture falls inside these points. Add points around the outside of a picture, or use Link one picture manually.'};
+    }finally{for(const m of [a,b,h,mask])m?.delete();}
   }
   function features(cv,pixels){
     const rgba=cv.matFromImageData(pixels),gray=new cv.Mat(),keypoints=new cv.KeyPointVector(),descriptors=new cv.Mat(),mask=new cv.Mat(),detector=new cv.AKAZE();
@@ -30,16 +59,16 @@
     try{
       matcher.knnMatch(base.descriptors,reference.descriptors,pairs,2);
       for(let i=0;i<pairs.size();i++){const pair=pairs.get(i);try{if(pair.size()<2)continue;const first=pair.get(0),second=pair.get(1);if(first.distance<.72*second.distance&&!used.has(first.trainIdx)){used.add(first.trainIdx);const p=base.keypoints.get(first.queryIdx).pt,q=reference.keypoints.get(first.trainIdx).pt;good.push({from:[p.x,p.y],to:[q.x,q.y]});}}finally{pair.delete();}}
-      if(good.length<12)return {status:'review',regions:[],inliers:0,reason:'Not enough distinctive points match the original wall.'};
+      if(good.length<12)return {status:'review',regions:[],inliers:0,points:diagnostics(good,[],base,reference),reason:'Not enough distinctive points match the original wall.'};
       a=cv.matFromArray(good.length,1,cv.CV_32FC2,good.flatMap(p=>p.from));b=cv.matFromArray(good.length,1,cv.CV_32FC2,good.flatMap(p=>p.to));mask=new cv.Mat();h=cv.findHomography(a,b,cv.RANSAC,3,mask,3000,.995);
-      if(h.empty())return {status:'review',regions:[],inliers:0,reason:'The photos could not be aligned reliably.'};
-      const matrix=Array.from(h.data64F),inliers=good.filter((p,i)=>mask.data[i]),ratio=inliers.length/good.length;
-      if(inliers.length<12||ratio<.35)return {status:'review',regions:[],inliers:inliers.length,reason:'The alignment has too many conflicting points.'};
+      if(h.empty())return {status:'review',regions:[],inliers:0,points:diagnostics(good,[],base,reference),reason:'The photos could not be aligned reliably.'};
+      const matrix=Array.from(h.data64F),inliers=good.filter((p,i)=>mask.data[i]),ratio=inliers.length/good.length,points=diagnostics(good,mask.data,base,reference);
+      if(inliers.length<12||ratio<.35)return {status:'review',regions:[],inliers:inliers.length,points,reason:'The alignment has too many conflicting points.'};
       const errors=inliers.map(p=>{const q=project(matrix,...p.from);return q?Math.hypot(q[0]-p.to[0],q[1]-p.to[1]):Infinity;}).sort((a,b)=>a-b),error=errors[Math.floor(errors.length/2)];
-      if(error>2.5)return {status:'review',regions:[],inliers:inliers.length,reason:'The picture positions remain uncertain.'};
+      if(error>2.5)return {status:'review',regions:[],inliers:inliers.length,points,reason:'The picture positions remain uncertain.'};
       const mapped=mapRegions(matrix,regions,[base.width,base.height],[reference.width,reference.height],inliers);
-      return {status:mapped.length?'aligned':'review',regions:mapped,inliers:inliers.length,error:Math.round(error*100)/100,reason:mapped.length?'':'The overlap does not cover enough of a marked wall picture.'};
+      return {status:mapped.length?'aligned':'review',regions:mapped,inliers:inliers.length,points,error:Math.round(error*100)/100,reason:mapped.length?'':'The overlap does not cover enough of a marked wall picture.'};
     }finally{matcher.delete();pairs.delete();for(const m of [a,b,mask,h])m?.delete();}
   }
-  return {VERSION,features,align,project,mapRegions};
+  return {VERSION,features,align,alignPoints,project,mapRegions};
 });

@@ -56,3 +56,10 @@ test('every newly uploaded wall photo automatically aligns and triggers source m
  const app=setup(true);await app.window.WallReferences.open();const input=app.nodes.get('referenceFiles');input.files=[new File(['one'],'New full wall.jpg'),new File(['two'],'New wall section.jpg')];await input.emit('change');
  assert.equal(app.alignmentCalls.length,2);assert.equal(app.saved.size,2);assert.equal(app.changed,2);assert([...app.saved.values()].every(r=>r.regions.length===1&&r.regions[0].origin==='automatic'));assert.match(app.nodes.get('referenceLinkedCrops').innerHTML,/Automatically linked/);assert.match(app.nodes.get('wallReferenceStatus').textContent,/picture links saved/);
 });
+
+test('a previously failed alignment exposes review and rotation preserves its editable point pairs',async()=>{
+ const app=setup(),opened=[];app.window.WallAlignmentReview={async open(...args){opened.push(args);}};
+ const record={id:'failed',label:'Existing wall',width:8000,height:2000,revision:1,url:'/api/wall-references/failed/image',rotation:0,enabled:true,regions:[],alignment:{engine:'wall-align-1',status:'review',inliers:3,reason:'The alignment has too many conflicting points.',points:[{id:'a',from:[10,20],to:[30,40],enabled:false,conflict:true}]}};app.saved.set(record.id,record);
+ await app.window.WallReferences.open();assert.match(app.nodes.get('referenceList').innerHTML,/Resolve alignment/);await app.click('reference-resolve',record.id);assert.equal(opened.length,1);assert.equal(opened[0][0].id,'failed');assert.match(opened[0][2],/^data:image/);
+ await app.nodes.get('referenceRotate').emit('click');await app.nodes.get('referenceSave').emit('click');const saved=app.saved.get(record.id);assert.deepEqual(Array.from(saved.alignment.points[0].to),[60,30]);assert.deepEqual(Array.from(saved.alignment.points[0].from),[10,20]);assert.equal(saved.alignment.points[0].enabled,false);
+});

@@ -41,3 +41,13 @@ test('small reference crops retain original pixels before model resizing and rot
  assert.equal(rules.cropGeometry(8000,2000,0,[0,0,100,100]).width,1024);
  const ref={...value(),revision:1,url:'/api/wall-references/reference1/image',regions:[{id:'r1',photoId:'wall1',crop:[0,0,20,20],enabled:false},{id:'r2',photoId:'wall2',crop:[20,20,30,30],enabled:true}]};assert.equal(rules.queries([ref],'wall1').length,0);assert.equal(rules.queries([ref],'wall2').length,1);
 });
+
+test('alignment review points and exclusions persist privately and invalid coordinates are rejected',async()=>{
+ const {handleWallReferences:handle}=await import('../worker/wall-references.mjs'),env=environment();
+ const points=[{id:'pair1',from:[10,20],to:[30,40],enabled:false,conflict:true,origin:'automatic'},{id:'pair2',from:[15,25],to:[35,45],enabled:true,origin:'manual'}];
+ const record={...value(),alignment:{engine:'wall-align-1',status:'review',method:'reviewed',inliers:0,points}};
+ assert.equal((await handle(request('PUT','/reference1',record,{image:true}),env,base)).status,201);
+ const saved=(await (await handle(request('GET','/reference1'),env,base)).json()).reference;assert.deepEqual(saved.alignment.points[0],points[0]);assert.equal(saved.alignment.points[1].origin,'manual');assert.equal(saved.alignment.method,'reviewed');
+ assert.equal((await handle(request('GET','/reference1',null,{owner:'other'}),env,base)).status,404);
+ assert.throws(()=>rules.alignmentPoints([{...points[0],to:[101,20]}]),/inside/);assert.throws(()=>rules.alignmentPoints([points[0],points[0]]),/inside/);assert.throws(()=>rules.alignmentPoints(Array(81).fill(points[0])),/80/);
+});

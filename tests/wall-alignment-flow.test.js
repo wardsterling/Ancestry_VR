@@ -22,3 +22,12 @@ test('automatic alignment keeps manual links and exclusions; interrupted saves r
  const failed=await s.window.WallAlignment.process([record],photos);assert.match(failed[0].alignmentError,/storage outage/);assert.equal(s.records.get(record.id).regions.length,1);assert.equal(s.records.get(record.id).alignment,undefined);
  s.setFail(false);const result=await s.window.WallAlignment.process([record],photos);assert.deepEqual(result[0].regions[0],record.regions[0]);assert.equal(result[0].regions.length,2);
 });
+
+test('reviewed alignment replaces automatic links while preserving manual choices and sends saved points on future retries',async()=>{
+ const s=setup(),record=reference('reviewed');record.regions=[{id:'manual',photoId:'wall1',crop:[2,3,14,12],enabled:false},{id:'outdated',photoId:'wall2',crop:[2,2,3,3],enabled:true,origin:'automatic'}];s.records.set(record.id,record);
+ const points=[{id:'a',from:[1,2],to:[4,5],enabled:false}];
+ const draft=await s.window.WallAlignment.saveReviewDraft(record,points);assert.equal(draft.alignment.method,'reviewed');assert.deepEqual(draft.regions,record.regions);assert.equal(draft.alignment.status,'review');
+ const preview=await s.window.WallAlignment.preview(draft,photos,points);assert.deepEqual(s.jobs[0].points,points);s.setFail(true);await assert.rejects(s.window.WallAlignment.saveReviewed(draft,{...preview,method:'reviewed',points}),/outage/);assert.equal(s.records.get(record.id).alignment.status,'review');
+ s.setFail(false);const saved=await s.window.WallAlignment.saveReviewed(draft,{...preview,method:'reviewed',points});assert.deepEqual(saved.regions[0],record.regions[0]);assert.deepEqual(Array.from(saved.regions[1].crop),[40,40,25,30]);assert(saved.regions[1].id!=='outdated');assert.deepEqual(saved.alignment.points,points);
+ await s.window.WallAlignment.process([saved],photos,{force:true});assert.deepEqual(s.jobs.at(-1).points,points);
+});

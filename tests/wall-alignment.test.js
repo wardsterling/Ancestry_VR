@@ -18,3 +18,20 @@ test('unrelated photos and blank photos remain unlinked for review',async()=>{
  for(const photo of [b,blank]){const reference=core.features(cv,imageData(photo)),result=core.align(cv,base,reference,regions);assert.equal(result.status,'review');assert.equal(result.regions.length,0);reference.dispose();}
  base.dispose();for(const m of [a,b,blank])m.delete();
 });
+
+test('reviewed corner pairs recover a conflicted view, restrict links to covered pictures and reject folded or degenerate points',async()=>{
+ await ready;
+ const pairs=[[0,0],[65,0],[65,85],[0,85],[30,12],[55,70]].map((p,i)=>({id:'p'+i,from:p,to:[p[0]+2,p[1]+3],enabled:true,origin:'manual'}));
+ const bad=[[5,65],[8,22],[31,5],[53,54],[13,73],[47,19]].map((p,i)=>({id:'bad'+i,from:p,to:[80-i*5,10+i*12],enabled:true,origin:'automatic'}));
+ const conflict=core.alignPoints(cv,[...pairs,...bad],regions,[800,400],[800,400]);assert.equal(conflict.status,'review');assert.match(conflict.reason,/conflict/);assert(conflict.points.some(p=>p.conflict));
+ const corrected=core.alignPoints(cv,[...pairs,...bad.map(p=>({...p,enabled:false}))],regions,[800,400],[800,400]);assert.equal(corrected.status,'aligned');assert.equal(corrected.method,'reviewed');assert.deepEqual(corrected.regions.map(r=>r.photoId),['left','middle']);assert(Math.abs(corrected.regions[1].crop[0]-42)<.01);assert.equal(corrected.points.filter(p=>!p.enabled).length,6);
+ assert.equal(core.alignPoints(cv,pairs.slice(0,3),regions,[800,400],[800,400]).status,'review');
+ const line=[10,30,50,70].map((n,i)=>({id:'line'+i,from:[n,30],to:[n,35],enabled:true}));assert.match(core.alignPoints(cv,line,regions,[800,400],[800,400]).reason,/one line/);
+ const mirror=pairs.map(p=>({...p,to:[100-p.from[0],p.from[1]]}));assert.equal(core.alignPoints(cv,mirror,regions,[800,400],[800,400]).regions.length,0);
+});
+
+test('failed automatic registration returns bounded, normalized point evidence for review',async()=>{
+ await ready;const a=pattern(),b=pattern(9383),base=core.features(cv,imageData(a)),ref=core.features(cv,imageData(b)),result=core.align(cv,base,ref,regions);
+ assert.equal(result.status,'review');assert(result.points?.length<=80);for(const p of result.points){assert(p.from.every(n=>n>=0&&n<=100));assert(p.to.every(n=>n>=0&&n<=100));assert.equal(typeof p.conflict,'boolean');}
+ base.dispose();ref.dispose();a.delete();b.delete();
+});
